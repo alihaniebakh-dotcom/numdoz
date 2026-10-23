@@ -133,6 +133,7 @@ class AndroidDataStore(context: Context) :
     override suspend fun ensureSchema() = withContext(Dispatchers.IO) {
         writableDatabase // triggers onCreate if first time
         Log.d(TAG, "schema ensured")
+        Unit
     }
 
     override suspend fun seedIfEmpty() = withContext(Dispatchers.IO) {
