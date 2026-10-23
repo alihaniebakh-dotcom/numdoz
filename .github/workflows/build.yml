@@ -7,6 +7,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - uses: actions/checkout@v4
 
@@ -15,12 +18,32 @@ jobs:
           distribution: 'temurin'
           java-version: '22'
 
-      - uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK 34
+      - name: Verify pre-installed Android SDK
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          echo "--- platforms:"
+          ls $ANDROID_HOME/platforms || echo "none"
+          echo "--- build-tools:"
+          ls $ANDROID_HOME/build-tools || echo "none"
+
+      - name: Accept Android licenses
+        run: |
+          SDKMANAGER=$(find $ANDROID_HOME/cmdline-tools -name sdkmanager -type f 2>/dev/null | head -1)
+          echo "sdkmanager: $SDKMANAGER"
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses 2>&1 | tail -5 || true
+          else
+            echo "sdkmanager not found, skipping"
+          fi
+
+      - name: Ensure SDK packages (android-34)
+        run: |
+          SDKMANAGER=$(find $ANDROID_HOME/cmdline-tools -name sdkmanager -type f 2>/dev/null | head -1)
+          if [ -n "$SDKMANAGER" ]; then
+            "$SDKMANAGER" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools" 2>&1 | tail -10 || true
+          fi
+          echo "--- after install, platforms:"
+          ls $ANDROID_HOME/platforms || true
 
       - uses: gradle/actions/setup-gradle@v3
         with:
