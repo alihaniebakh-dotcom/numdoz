@@ -1,0 +1,65 @@
+﻿To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.8/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Configure project :composeApp
+w: file:///E:/Android%20App/Numdoz/composeApp/build.gradle.kts:12:21: Experimental API in the Kotlin Gradle Plugin: No stability guarantees can be provided. The API could get removed in the future without replacement
+w: file:///E:/Android%20App/Numdoz/composeApp/build.gradle.kts:13:22: Experimental API in the Kotlin Gradle Plugin: No stability guarantees can be provided. The API could get removed in the future without replacement
+Failed to download any source lists!
+IO exception while downloading manifest:
+java.io.FileNotFoundException: https://dl.google.com/android/repository/repository2-2.xml
+	at java.base/sun.net.www.protocol.http.HttpURLConnection.getInputStream0(HttpURLConnection.java:2010)
+	at java.base/sun.net.www.protocol.http.HttpURLConnection.getInputStream(HttpURLConnection.java:1615)
+	at java.base/sun.net.www.protocol.https.HttpsURLConnectionImpl.getInputStream(HttpsURLConnectionImpl.java:223)
+	at com.android.sdklib.repository.legacy.remote.internal.DownloadCache.openUrl(DownloadCache.java:246)
+	at com.android.sdklib.repository.legacy.remote.internal.DownloadCache.downloadAndCache(DownloadCache.java:622)
+	at com.android.sdklib.repository.legacy.remote.internal.DownloadCache.openCachedUrl(DownloadCache.java:545)
+	at com.android.sdklib.repository.legacy.LegacyDownloader.downloadAndStream(LegacyDownloader.java:82)
+	at com.android.repository.impl.downloader.LocalFileAwareDownloader.downloadAndStream(LocalFileAwareDownloader.java:51)
+	at com.android.repository.impl.manager.RemoteRepoLoaderImpl.lambda$fetchPackages$0(RemoteRepoLoaderImpl.java:138)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1570)
+
+IO exception while downloading manifest:
+java.io.FileNotFoundException: https://dl.google.com/android/repository/repository2-3.xml
+	at java.base/sun.net.www.protocol.http.HttpURLConnection.getInputStream0(HttpURLConnection.java:2010)
+	at java.base/sun.net.www.protocol.http.HttpURLConnection.getInputStream(HttpURLConnection.java:1615)
+	at java.base/sun.net.www.protocol.https.HttpsURLConnectionImpl.getInputStream(HttpsURLConnectionImpl.java:223)
+	at com.android.sdklib.repository.legacy.remote.internal.DownloadCache.openUrl(DownloadCache.java:246)
+	at com.android.sdklib.repository.legacy.remote.internal.DownloadCache.downloadAndCache(DownloadCache.java:622)
+	at com.android.sdklib.repository.legacy.remote.internal.DownloadCache.openCachedUrl(DownloadCache.java:545)
+	at com.android.sdklib.repository.legacy.LegacyDownloader.downloadAndStream(LegacyDownloader.java:82)
+	at com.android.repository.impl.downloader.LocalFileAwareDownloader.downloadAndStream(LocalFileAwareDownloader.java:51)
+	at com.android.repository.impl.manager.RemoteRepoLoaderImpl.lambda$fetchPackages$0(RemoteRepoLoaderImpl.java:138)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1570)
+
+Still waiting for package manifests to be fetched remotely.
+.\gradlew.bat : 
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Could not determine the dependencies of task ':composeApp:compileDebugKotlinAndroid'.
+> Failed to find Build Tools revision 34.0.0
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.8/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 2m 21s

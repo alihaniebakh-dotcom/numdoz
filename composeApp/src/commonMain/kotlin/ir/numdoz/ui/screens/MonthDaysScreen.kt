@@ -41,12 +41,13 @@ import ir.numdoz.data.local.DataStore
 import ir.numdoz.data.model.Level
 import ir.numdoz.data.model.LevelProgress
 import ir.numdoz.data.model.Section
+import ir.numdoz.i18n.LocalLang
+import ir.numdoz.i18n.displayDescription
+import ir.numdoz.i18n.displayTitle
 import ir.numdoz.ui.components.LevelBadge
 import ir.numdoz.ui.components.LevelBadgeState
 import ir.numdoz.ui.components.LogoCircle
 import ir.numdoz.ui.theme.LocalAccent
-import ir.numdoz.ui.theme.TextMuted
-import ir.numdoz.ui.theme.TextPrimary
 import ir.numdoz.ui.theme.TextSecondary
 
 @Composable
@@ -61,6 +62,7 @@ fun MonthDaysScreen(
 ) {
     val audio = LocalAudio.current
     val accent = LocalAccent.current
+    val lang = LocalLang.current
 
     var section by remember { mutableStateOf<Section?>(null) }
     var levels by remember { mutableStateOf<List<Level>>(emptyList()) }
@@ -70,9 +72,7 @@ fun MonthDaysScreen(
     LaunchedEffect(sectionId) {
         try {
             section = dataStore.getSections(chapterId).find { it.id == sectionId }
-            section?.accentColorHex?.let { hex ->
-                parseHex(hex)?.let { onTintChange(it) }
-            }
+            section?.accentColorHex?.let { hex -> parseHex(hex)?.let { onTintChange(it) } }
             val lv = dataStore.getLevels(sectionId)
             levels = lv
             val prog = mutableMapOf<String, LevelProgress>()
@@ -93,14 +93,12 @@ fun MonthDaysScreen(
                 .padding(horizontal = 20.dp)
         ) {
             Spacer(Modifier.height(12.dp))
-
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { audio.playSfx(Sfx.CLICK); onBack() }) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = TextSecondary)
                 }
                 Spacer(Modifier.weight(1f))
             }
-
             Spacer(Modifier.height(4.dp))
 
             section?.let { s ->
@@ -117,30 +115,27 @@ fun MonthDaysScreen(
                     LogoCircle(logoName = s.logoName, accent = mColor, size = 64.dp)
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        text = s.titleFa,
+                        text = s.displayTitle(lang),
                         style = MaterialTheme.typography.headlineMedium,
-                        color = TextPrimary,
+                        color = ir.numdoz.ui.theme.TextPrimary,
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = s.descriptionFa,
+                        text = s.displayDescription(lang),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         textAlign = TextAlign.Center
                     )
                 }
             }
-
             Spacer(Modifier.height(20.dp))
 
             when {
                 loading -> Box(
                     modifier = Modifier.fillMaxWidth().height(200.dp),
                     contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = accent, strokeWidth = 2.dp)
-                }
+                ) { CircularProgressIndicator(color = accent, strokeWidth = 2.dp) }
                 else -> {
                     val mColor = section?.accentColorHex?.let { parseHex(it) } ?: accent
                     Column(

@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ir.numdoz.i18n.LocalStrings
 import ir.numdoz.ui.components.AnimatedLogo
 import ir.numdoz.ui.theme.TextPrimary
 import ir.numdoz.ui.theme.TextSecondary
@@ -35,6 +36,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(onDone: () -> Unit) {
+    val strings = LocalStrings.current
     var shown by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -44,10 +46,7 @@ fun SplashScreen(onDone: () -> Unit) {
         onDone()
     }
 
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier.widthIn(max = 460.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -60,9 +59,7 @@ fun SplashScreen(onDone: () -> Unit) {
             ) {
                 AnimatedLogo(size = 160.dp)
             }
-
             Spacer(Modifier.height(28.dp))
-
             AnimatedVisibility(
                 visible = shown,
                 enter = fadeIn(tween(700, delayMillis = 350)) +
@@ -78,9 +75,7 @@ fun SplashScreen(onDone: () -> Unit) {
                     color = TextPrimary
                 )
             }
-
             Spacer(Modifier.height(12.dp))
-
             AnimatedVisibility(
                 visible = shown,
                 enter = fadeIn(tween(600, delayMillis = 700))
@@ -92,15 +87,13 @@ fun SplashScreen(onDone: () -> Unit) {
                         .background(Color(0x33FFFFFF))
                 )
             }
-
             Spacer(Modifier.height(14.dp))
-
             AnimatedVisibility(
                 visible = shown,
                 enter = fadeIn(tween(600, delayMillis = 900))
             ) {
                 Text(
-                    text = "عددچین",
+                    text = strings.tagline,
                     style = MaterialTheme.typography.titleLarge,
                     color = TextSecondary
                 )

@@ -42,6 +42,11 @@ import ir.numdoz.data.local.DataStore
 import ir.numdoz.data.model.Chapter
 import ir.numdoz.data.model.Section
 import ir.numdoz.data.model.SectionStats
+import ir.numdoz.i18n.Lang
+import ir.numdoz.i18n.LocalLang
+import ir.numdoz.i18n.LocalStrings
+import ir.numdoz.i18n.displayDescription
+import ir.numdoz.i18n.displayTitle
 import ir.numdoz.ui.components.ChapterRow
 import ir.numdoz.ui.components.LogoCircle
 import ir.numdoz.ui.theme.LocalAccent
@@ -61,6 +66,8 @@ fun ChapterMonthsScreen(
 ) {
     val audio = LocalAudio.current
     val accent = LocalAccent.current
+    val lang = LocalLang.current
+    val strings = LocalStrings.current
     val scope = rememberCoroutineScope()
 
     var chapter by remember { mutableStateOf<Chapter?>(null) }
@@ -71,9 +78,7 @@ fun ChapterMonthsScreen(
     LaunchedEffect(chapterId) {
         try {
             chapter = dataStore.getAllChapters().find { it.id == chapterId }
-            chapter?.accentColorHex?.let { hex ->
-                parseHex(hex)?.let { onTintChange(it) }
-            }
+            chapter?.accentColorHex?.let { hex -> parseHex(hex)?.let { onTintChange(it) } }
             val secs = dataStore.getSections(chapterId)
             monthsWithStats = secs.map { it to dataStore.getStatsForSection(it.id) }
             println("[NumDoz/ui] ChapterMonths: ${secs.size} months")
@@ -91,14 +96,12 @@ fun ChapterMonthsScreen(
                 .padding(horizontal = 20.dp)
         ) {
             Spacer(Modifier.height(12.dp))
-
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { audio.playSfx(Sfx.CLICK); onBack() }) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = TextSecondary)
                 }
                 Spacer(Modifier.weight(1f))
             }
-
             Spacer(Modifier.height(4.dp))
 
             chapter?.let { ch ->
@@ -115,34 +118,31 @@ fun ChapterMonthsScreen(
                     LogoCircle(logoName = ch.logoName, accent = chColor, size = 72.dp)
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = ch.titleFa,
+                        text = ch.displayTitle(lang),
                         style = MaterialTheme.typography.headlineMedium,
                         color = TextPrimary,
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = ch.descriptionFa,
+                        text = ch.displayDescription(lang),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         textAlign = TextAlign.Center
                     )
                 }
             }
-
             Spacer(Modifier.height(24.dp))
 
-            Text("ماه‌ها", style = MaterialTheme.typography.labelLarge, color = TextMuted)
+            Text(strings.monthsLabel, style = MaterialTheme.typography.labelLarge, color = TextMuted)
             Spacer(Modifier.height(10.dp))
 
             when {
                 loading -> Box(
                     modifier = Modifier.fillMaxWidth().height(150.dp),
                     contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = accent, strokeWidth = 2.dp)
-                }
-                chapter == null -> Text("فصل پیدا نشد", color = TextSecondary)
+                ) { CircularProgressIndicator(color = accent, strokeWidth = 2.dp) }
+                chapter == null -> Text("—", color = TextSecondary)
                 else -> Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -157,8 +157,8 @@ fun ChapterMonthsScreen(
                             } == true
                         val monthColor = parseHex(month.accentColorHex) ?: chColor
                         ChapterRow(
-                            title = month.titleFa,
-                            subtitle = "${stats.completedLevels} از ${stats.totalLevels} روز",
+                            title = month.displayTitle(lang),
+                            subtitle = strings.progressDays(stats.completedLevels, stats.totalLevels),
                             accent = monthColor,
                             logoName = month.logoName,
                             locked = !unlocked,
@@ -183,10 +183,10 @@ fun ChapterMonthsScreen(
             IntroDialog(
                 logoName = m.logoName,
                 accent = parseHex(m.accentColorHex) ?: accent,
-                title = m.titleFa,
-                subtitle = m.titleEn,
-                description = m.descriptionFa,
-                buttonLabel = "ورود به ماه",
+                title = m.displayTitle(lang),
+                subtitle = if (lang == Lang.FA) m.titleEn else m.titleFa,
+                description = m.displayDescription(lang),
+                buttonLabel = strings.enterMonth,
                 onDismiss = {
                     val id = m.id
                     pendingMonth = null

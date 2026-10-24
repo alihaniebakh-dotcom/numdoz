@@ -43,7 +43,8 @@ fun YearCard(
     logoName: String,
     locked: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    comingSoonLabel: String = "Coming soon"
 ) {
     val glow = rememberInfiniteTransition(label = "yearGlow")
     val pulse by glow.animateFloat(
@@ -78,7 +79,6 @@ fun YearCard(
                 }
             }
             .clip(RoundedCornerShape(24.dp))
-            // ★ semi-transparent gradient — floating numbers show through
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
@@ -120,7 +120,7 @@ fun YearCard(
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "به زودی",
+                    text = comingSoonLabel,
                     color = accent.copy(alpha = 0.95f),
                     style = MaterialTheme.typography.labelLarge
                 )

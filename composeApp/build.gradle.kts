@@ -33,6 +33,8 @@ kotlin {
         }
         val androidMain by getting {
             dependencies {
+                implementation("ir.tapsell:tapsell:1.3.0")
+                implementation("ir.tapsell.mediation.adapter:legacy:1.3.0")
                 implementation("androidx.activity:activity-compose:1.9.3")
             }
         }
@@ -47,6 +49,11 @@ android {
     namespace = "ir.numdoz"
     compileSdk = 34
     defaultConfig {
+        addManifestPlaceholders(
+            mapOf(
+                "TapsellMediationAppKey" to "mlrdeocclskleaatmimrmklbgtkprrggfafenjcolbdaolmetljbkmimjbfslnlehjaimk"
+            )
+        )
         applicationId = "ir.numdoz"
         minSdk = 24
         targetSdk = 34

@@ -42,6 +42,11 @@ import ir.numdoz.data.local.DataStore
 import ir.numdoz.data.model.Chapter
 import ir.numdoz.data.model.ChapterStats
 import ir.numdoz.data.model.Year
+import ir.numdoz.i18n.Lang
+import ir.numdoz.i18n.LocalLang
+import ir.numdoz.i18n.LocalStrings
+import ir.numdoz.i18n.displayDescription
+import ir.numdoz.i18n.displayTitle
 import ir.numdoz.ui.components.ChapterRow
 import ir.numdoz.ui.components.LogoCircle
 import ir.numdoz.ui.theme.LocalAccent
@@ -60,6 +65,8 @@ fun ChaptersScreen(
 ) {
     val audio = LocalAudio.current
     val accent = LocalAccent.current
+    val lang = LocalLang.current
+    val strings = LocalStrings.current
     val scope = rememberCoroutineScope()
 
     var year by remember { mutableStateOf<Year?>(null) }
@@ -70,9 +77,7 @@ fun ChaptersScreen(
     LaunchedEffect(yearId) {
         try {
             year = dataStore.getAllYears().find { it.id == yearId }
-            year?.accentColorHex?.let { hex ->
-                parseHex(hex)?.let { onTintChange(it) }
-            }
+            year?.accentColorHex?.let { hex -> parseHex(hex)?.let { onTintChange(it) } }
             val chs = dataStore.getChaptersByYear(yearId)
             chaptersWithStats = chs.map { it to dataStore.getStatsForChapter(it.id) }
             println("[NumDoz/ui] ChaptersScreen: ${chs.size} chapters")
@@ -90,14 +95,12 @@ fun ChaptersScreen(
                 .padding(horizontal = 20.dp)
         ) {
             Spacer(Modifier.height(12.dp))
-
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { audio.playSfx(Sfx.CLICK); onBack() }) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = TextSecondary)
                 }
                 Spacer(Modifier.weight(1f))
             }
-
             Spacer(Modifier.height(4.dp))
 
             year?.let { y ->
@@ -114,37 +117,30 @@ fun ChaptersScreen(
                     LogoCircle(logoName = y.logoName, accent = yColor, size = 64.dp)
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        text = y.titleFa,
+                        text = y.displayTitle(lang),
                         style = MaterialTheme.typography.headlineMedium,
                         color = TextPrimary,
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = y.descriptionFa,
+                        text = y.displayDescription(lang),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         textAlign = TextAlign.Center
                     )
                 }
             }
-
             Spacer(Modifier.height(22.dp))
 
-            Text(
-                text = "فصل‌ها",
-                style = MaterialTheme.typography.labelLarge,
-                color = TextMuted
-            )
+            Text(strings.seasonsLabel, style = MaterialTheme.typography.labelLarge, color = TextMuted)
             Spacer(Modifier.height(10.dp))
 
             when {
                 loading -> Box(
                     modifier = Modifier.fillMaxWidth().height(180.dp),
                     contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = accent, strokeWidth = 2.dp)
-                }
+                ) { CircularProgressIndicator(color = accent, strokeWidth = 2.dp) }
 
                 else -> Column(
                     modifier = Modifier
@@ -159,8 +155,8 @@ fun ChaptersScreen(
                             } == true
                         val chColor = parseHex(ch.accentColorHex) ?: accent
                         ChapterRow(
-                            title = ch.titleFa,
-                            subtitle = "${stats.completedLevels} از ${stats.totalLevels} مرحله",
+                            title = ch.displayTitle(lang),
+                            subtitle = strings.progressLevels(stats.completedLevels, stats.totalLevels),
                             accent = chColor,
                             logoName = ch.logoName,
                             locked = !unlocked,
@@ -185,10 +181,10 @@ fun ChaptersScreen(
             IntroDialog(
                 logoName = ch.logoName,
                 accent = parseHex(ch.accentColorHex) ?: accent,
-                title = ch.titleFa,
-                subtitle = ch.titleEn,
-                description = ch.descriptionFa,
-                buttonLabel = "ورود به فصل",
+                title = ch.displayTitle(lang),
+                subtitle = if (lang == Lang.FA) ch.titleEn else ch.titleFa,
+                description = ch.displayDescription(lang),
+                buttonLabel = strings.enterSeason,
                 onDismiss = {
                     val id = ch.id
                     pendingChapter = null

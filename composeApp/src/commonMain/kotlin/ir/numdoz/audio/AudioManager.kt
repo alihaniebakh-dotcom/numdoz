@@ -1,6 +1,7 @@
 ﻿package ir.numdoz.audio
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,7 @@ class AudioManager(
     private val baseSfxVolume: Float = 0.55f
 ) {
     private val sfxCache = mutableMapOf<Sfx, ByteArray>()
+    private var pausedByBackground = false
 
     var isMuted by mutableStateOf(false)
         private set
@@ -61,7 +63,21 @@ class AudioManager(
         musicPlayer.setVolume(if (isMuted) 0f else baseMusicVolume)
     }
 
+    // ── Lifecycle (background / foreground) ──
+    fun pauseForBackground() {
+        if (pausedByBackground) return
+        pausedByBackground = true
+        try { musicPlayer.pause() } catch (_: Throwable) {}
+    }
+
+    fun resumeFromBackground() {
+        if (!pausedByBackground) return
+        pausedByBackground = false
+        try { musicPlayer.resume() } catch (_: Throwable) {}
+    }
+
     fun release() {
+        try { LifecycleBus.unregister() } catch (_: Throwable) {}
         musicPlayer.release()
         sfxPlayer.release()
     }
@@ -77,6 +93,17 @@ fun rememberAudioManager(): AudioManager {
     val musicPlayer = remember { createPlatformAudioPlayer() }
     val sfxPlayer = remember { createPlatformAudioPlayer() }
     val manager = remember { AudioManager(musicPlayer, sfxPlayer) }
+
+    // Register lifecycle handlers so pausing the app pauses music
+    DisposableEffect(manager) {
+        LifecycleBus.register(
+            onPause = { manager.pauseForBackground() },
+            onResume = { manager.resumeFromBackground() }
+        )
+        onDispose {
+            manager.release()
+        }
+    }
 
     LaunchedEffect(Unit) {
         val sfxList = listOf(

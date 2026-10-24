@@ -31,8 +31,10 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +63,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import ir.numdoz.ads.LocalAdManager
 import ir.numdoz.audio.LocalAudio
 import ir.numdoz.audio.Sfx
 import ir.numdoz.data.local.DataStore
@@ -69,6 +72,11 @@ import ir.numdoz.data.model.Level
 import ir.numdoz.data.model.LevelProgress
 import ir.numdoz.data.model.Section
 import ir.numdoz.data.model.UserWallet
+import ir.numdoz.i18n.LocalLang
+import ir.numdoz.i18n.LocalStrings
+import ir.numdoz.i18n.displayHint1
+import ir.numdoz.i18n.displayHint2
+import ir.numdoz.i18n.displayTitle
 import ir.numdoz.ui.theme.LocalAccent
 import ir.numdoz.ui.theme.TextMuted
 import ir.numdoz.ui.theme.TextPrimary
@@ -76,8 +84,6 @@ import ir.numdoz.ui.theme.TextSecondary
 import ir.numdoz.util.currentTimeMillis
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-enum class AdPurpose { TIME, HINT }
 
 @Composable
 fun LevelPlayScreen(
@@ -90,9 +96,12 @@ fun LevelPlayScreen(
     onNext: (nextLevelId: String) -> Unit
 ) {
     val audio = LocalAudio.current
+    val adManager = LocalAdManager.current
     val accent = LocalAccent.current
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
+    val lang = LocalLang.current
+    val strings = LocalStrings.current
 
     var loaded by remember { mutableStateOf(false) }
     var level by remember { mutableStateOf<Level?>(null) }
@@ -111,13 +120,13 @@ fun LevelPlayScreen(
     var showResult by remember { mutableStateOf(false) }
     var starsEarned by remember { mutableIntStateOf(0) }
     var showTimeoutModal by remember { mutableStateOf(false) }
-    var showAdFor by remember { mutableStateOf<AdPurpose?>(null) }
-    var adSeconds by remember { mutableIntStateOf(5) }
     var showHintModal by remember { mutableStateOf(false) }
+    var adLoading by remember { mutableStateOf(false) }
+    var adError by remember { mutableStateOf<String?>(null) }
     var wrongTrigger by remember { mutableIntStateOf(0) }
-    val shakeOffset = remember { Animatable(0f) }
 
-    val isPaused = showResult || showTimeoutModal || showAdFor != null
+    val shakeOffset = remember { Animatable(0f) }
+    val isPaused = showResult || showTimeoutModal || adLoading || adError != null
     val elapsed = 180 + timeExtUsed * 60 - timeLeft
     val canRevealMore = !hint1Revealed || !hint2Revealed
 
@@ -128,18 +137,18 @@ fun LevelPlayScreen(
             chapter = dataStore.getAllChapters().find { it.id == chapterId }
             if (lv != null) {
                 section = dataStore.getSections(chapterId).find { it.id == lv.sectionId }
-                val all = dataStore.getLevels(lv.sectionId)
-                val idx = all.indexOfFirst { it.id == lv.id }
-                nextLevelId = all.getOrNull(idx + 1)?.id
-                timeLeft = lv.timeLimitSeconds
-                wallet = dataStore.getWallet()
-            }
                 section?.accentColorHex?.let { hex ->
                     try {
                         val h = hex.removePrefix("#")
                         if (h.length == 6) onTintChange(Color(0xFF000000 or h.toLong(16)))
                     } catch (_: Throwable) { }
                 }
+                val all = dataStore.getLevels(lv.sectionId)
+                val idx = all.indexOfFirst { it.id == lv.id }
+                nextLevelId = all.getOrNull(idx + 1)?.id
+                timeLeft = lv.timeLimitSeconds
+                wallet = dataStore.getWallet()
+            }
             println("[NumDoz/game] loaded: ${lv?.id}")
         } catch (t: Throwable) {
             println("[NumDoz/game] load failed: ${t.message}")
@@ -161,32 +170,14 @@ fun LevelPlayScreen(
         if (wrongTrigger == 0) return@LaunchedEffect
         shakeOffset.animateTo(0f, keyframes {
             durationMillis = 400
-            -12f at 40; 12f at 100; -8f at 160; 8f at 220; -4f at 280; 4f at 340; 0f at 400
+            -12f at 40
+            12f at 100
+            -8f at 160
+            8f at 220
+            -4f at 280
+            4f at 340
+            0f at 400
         })
-    }
-
-    LaunchedEffect(showAdFor) {
-        val purpose = showAdFor ?: return@LaunchedEffect
-        adSeconds = 5
-        while (adSeconds > 0) {
-            delay(1000)
-            adSeconds--
-        }
-        when (purpose) {
-            AdPurpose.TIME -> {
-                timeLeft = 60
-                timeExtUsed++
-            }
-            AdPurpose.HINT -> {
-                wallet = wallet.copy(
-                    freeHints = wallet.freeHints + 1,
-                    totalAdsWatched = wallet.totalAdsWatched + 1
-                )
-                scope.launch { dataStore.updateWallet(wallet) }
-            }
-        }
-        showAdFor = null
-        audio.playSfx(Sfx.CLICK)
     }
 
     fun revealNextHint() {
@@ -211,11 +202,7 @@ fun LevelPlayScreen(
     fun onHintIconClick() {
         audio.playSfx(Sfx.CLICK)
         if (!canRevealMore) return
-        if (wallet.freeHints > 0) {
-            revealNextHint()
-        } else {
-            showHintModal = true
-        }
+        if (wallet.freeHints > 0) revealNextHint() else showHintModal = true
     }
 
     fun calculateStars(): Int {
@@ -240,9 +227,11 @@ fun LevelPlayScreen(
             scope.launch {
                 dataStore.upsertLevelProgress(
                     LevelProgress(
-                        levelId = lv.id, completed = true,
+                        levelId = lv.id,
+                        completed = true,
                         bestTimeSeconds = elapsed.coerceAtLeast(1),
-                        stars = starsEarned, hintsUsed = hintsUsed,
+                        stars = starsEarned,
+                        hintsUsed = hintsUsed,
                         timeExtensionsUsed = timeExtUsed,
                         lastPlayedAt = currentTimeMillis()
                     )
@@ -252,6 +241,37 @@ fun LevelPlayScreen(
             audio.playSfx(Sfx.WRONG)
             wrongTrigger++
         }
+    }
+
+    fun requestAdForHint() {
+        showHintModal = false
+        adLoading = true
+        adError = null
+        adManager.showRewarded(
+            onRewarded = {
+                wallet = wallet.copy(
+                    freeHints = wallet.freeHints + 1,
+                    totalAdsWatched = wallet.totalAdsWatched + 1
+                )
+                scope.launch { dataStore.updateWallet(wallet) }
+            },
+            onClosed = { adLoading = false },
+            onFailed = { msg -> adLoading = false; adError = msg }
+        )
+    }
+
+    fun requestAdForTime() {
+        showTimeoutModal = false
+        adLoading = true
+        adError = null
+        adManager.showRewarded(
+            onRewarded = {
+                timeLeft = 60
+                timeExtUsed++
+            },
+            onClosed = { adLoading = false },
+            onFailed = { msg -> adLoading = false; adError = msg }
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -272,8 +292,6 @@ fun LevelPlayScreen(
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = TextSecondary)
                 }
                 Spacer(Modifier.weight(1f))
-
-                // Hint icon — direct reveal if wallet has hints
                 IconButton(
                     enabled = canRevealMore,
                     onClick = { onHintIconClick() }
@@ -288,7 +306,7 @@ fun LevelPlayScreen(
                         Icon(
                             imageVector = if (wallet.freeHints > 0) Icons.Filled.Lightbulb
                                           else Icons.Outlined.Lightbulb,
-                            contentDescription = "Hint",
+                            contentDescription = strings.hintLabel,
                             tint = when {
                                 !canRevealMore -> TextMuted
                                 wallet.freeHints > 0 -> accent
@@ -304,9 +322,9 @@ fun LevelPlayScreen(
             Spacer(Modifier.height(6.dp))
 
             val subtitle = buildString {
-                chapter?.titleFa?.let { append(it) }
-                section?.titleFa?.let { append(" · ").append(it) }
-                level?.dayNumber?.let { if (it > 0) append(" · روز ").append(it) }
+                chapter?.displayTitle(lang)?.let { append(it) }
+                section?.displayTitle(lang)?.let { append(" · ").append(it) }
+                level?.dayNumber?.let { if (it > 0) append(" · ").append(strings.dayLabel(it)) }
             }
             if (subtitle.isNotEmpty()) {
                 Text(
@@ -319,13 +337,19 @@ fun LevelPlayScreen(
 
             Spacer(Modifier.weight(0.15f))
 
-            level?.let { SequenceDisplay(sequence = it.sequence, accent = accent) }
+            level?.let {
+                SequenceDisplay(
+                    sequence = it.sequence,
+                    accent = accent,
+                    label = strings.completeSequence
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
 
             if (level != null) {
                 val lv = level!!
-                val keyboardType = if (lv.correctAnswer.all { it.isDigit() })
+                val keyboardType = if (lv.correctAnswer.all { c -> c.isDigit() })
                     KeyboardType.Number else KeyboardType.Text
                 val focusRequester = remember { FocusRequester() }
 
@@ -336,7 +360,7 @@ fun LevelPlayScreen(
                         .fillMaxWidth()
                         .offset(x = shakeOffset.value.dp)
                         .focusRequester(focusRequester),
-                    placeholder = { Text("پاسخ…", color = TextMuted) },
+                    placeholder = { Text(strings.answerPlaceholder, color = TextMuted) },
                     textStyle = MaterialTheme.typography.headlineMedium.copy(
                         textAlign = TextAlign.Center,
                         color = accent,
@@ -349,21 +373,25 @@ fun LevelPlayScreen(
                         unfocusedBorderColor = accent.copy(alpha = 0.3f),
                         cursorColor = accent
                     ),
-                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Done),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = keyboardType,
+                        imeAction = ImeAction.Done
+                    ),
                     keyboardActions = KeyboardActions(onDone = { submit() })
                 )
-
-                LaunchedEffect(Unit) { delay(300); focusRequester.requestFocus() }
+                LaunchedEffect(Unit) {
+                    delay(300)
+                    focusRequester.requestFocus()
+                }
             }
 
-            // Hints under the input
             if (hint1Revealed) {
                 Spacer(Modifier.height(12.dp))
-                HintCard(text = level?.hint1Fa ?: "", accent = accent)
+                HintCard(text = level?.displayHint1(lang) ?: "", accent = accent)
             }
             if (hint2Revealed) {
                 Spacer(Modifier.height(8.dp))
-                HintCard(text = level?.hint2Fa ?: "", accent = accent)
+                HintCard(text = level?.displayHint2(lang) ?: "", accent = accent)
             }
 
             Spacer(Modifier.height(20.dp))
@@ -381,9 +409,13 @@ fun LevelPlayScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                    Icon(
+                        Icons.Filled.PlayArrow, null,
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
                     Text(
-                        text = "تأیید",
+                        text = strings.submit,
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
@@ -394,7 +426,7 @@ fun LevelPlayScreen(
             Spacer(Modifier.weight(0.3f))
         }
 
-        // Empty-wallet modal (only shown when wallet=0 and user clicks hint)
+        // Hint-no-wallet modal
         if (showHintModal) {
             ModalOverlay {
                 Column(
@@ -403,24 +435,27 @@ fun LevelPlayScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Lightbulb, null, tint = accent, modifier = Modifier.size(24.dp))
+                        Icon(
+                            Icons.Filled.Lightbulb, null,
+                            tint = accent,
+                            modifier = Modifier.size(24.dp)
+                        )
                         Spacer(Modifier.size(8.dp))
                         Text(
-                            "شما راهنما ندارید",
+                            strings.youHaveNoHintsTitle,
                             style = MaterialTheme.typography.headlineMedium,
                             color = TextPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                     Text(
-                        "برای دریافت راهنما یکی از گزینه‌های زیر را انتخاب کنید",
+                        strings.youHaveNoHintsDesc,
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         textAlign = TextAlign.Center
                     )
-                    PrimaryActionButton("تماشای تبلیغ — دریافت ۱ راهنما", accent) {
-                        showHintModal = false
-                        showAdFor = AdPurpose.HINT
+                    PrimaryActionButton(strings.watchAdForHint, accent) {
+                        requestAdForHint()
                     }
                     Box(
                         modifier = Modifier
@@ -429,106 +464,151 @@ fun LevelPlayScreen(
                             .clip(RoundedCornerShape(14.dp))
                             .background(Color(0xFF1A1A28))
                             .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(14.dp))
-                            .clickable { /* placeholder — coming soon */ },
+                            .clickable { },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            "خرید راهنما (به‌زودی)",
-                            color = TextMuted,
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.ShoppingCart, null,
+                                tint = TextMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                strings.buyHintComing,
+                                color = TextMuted,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
                     }
                     TextButton(onClick = {
                         audio.playSfx(Sfx.CLICK)
                         showHintModal = false
                     }) {
-                        Text("بستن", color = TextSecondary)
+                        Text(strings.close, color = TextSecondary)
                     }
                 }
             }
         }
 
+        // Result overlay
         AnimatedVisibility(
             visible = showResult,
-            enter = fadeIn(tween(250)) + scaleIn(initialScale = 0.85f, animationSpec = tween(350, easing = FastOutSlowInEasing))
+            enter = fadeIn(tween(250)) +
+                    scaleIn(
+                        initialScale = 0.85f,
+                        animationSpec = tween(350, easing = FastOutSlowInEasing)
+                    )
         ) {
             ResultOverlay(
-                stars = starsEarned, elapsed = elapsed, hintsUsed = hintsUsed,
-                accent = accent, hasNext = nextLevelId != null,
-                onNext = { audio.playSfx(Sfx.CLICK); nextLevelId?.let { onNext(it) } },
-                onBack = { audio.playSfx(Sfx.CLICK); onBack() }
+                stars = starsEarned,
+                elapsed = elapsed,
+                hintsUsed = hintsUsed,
+                accent = accent,
+                hasNext = nextLevelId != null,
+                onNext = {
+                    audio.playSfx(Sfx.CLICK)
+                    nextLevelId?.let { onNext(it) }
+                },
+                onBack = {
+                    audio.playSfx(Sfx.CLICK)
+                    onBack()
+                }
             )
         }
 
+        // Timeout modal
         if (showTimeoutModal) {
             ModalOverlay {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Text("زمان تمام شد", style = MaterialTheme.typography.headlineMedium, color = TextPrimary, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "برای ادامه یک تبلیغ ببینید تا ۱ دقیقه اضافه شود",
-                        style = MaterialTheme.typography.bodyMedium, color = TextSecondary, textAlign = TextAlign.Center
+                        strings.timesUp,
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.SemiBold
                     )
-                    PrimaryActionButton("تماشای تبلیغ", accent) {
-                        showTimeoutModal = false
-                        showAdFor = AdPurpose.TIME
+                    Text(
+                        strings.watchAdForTime,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                    PrimaryActionButton(strings.watchAd, accent) {
+                        requestAdForTime()
                     }
-                    TextButton(onClick = { audio.playSfx(Sfx.CLICK); onBack() }) {
-                        Text("بازگشت بدون ادامه", color = TextMuted)
+                    TextButton(onClick = {
+                        audio.playSfx(Sfx.CLICK)
+                        onBack()
+                    }) {
+                        Text(strings.backWithoutContinue, color = TextMuted)
                     }
                 }
             }
         }
 
-        if (showAdFor != null) {
+        // Ad loading overlay
+        if (adLoading) {
+            ModalOverlay {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(color = accent, strokeWidth = 3.dp)
+                    Text(
+                        text = if (lang.name == "FA") "در حال بارگذاری تبلیغ…"
+                               else "Loading ad…",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextSecondary
+                    )
+                }
+            }
+        }
+
+        // Ad error overlay
+        adError?.let { err ->
             ModalOverlay {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Text("تبلیغ", style = MaterialTheme.typography.labelLarge, color = TextMuted)
                     Text(
-                        "شمارش معکوس: $adSeconds",
-                        style = MaterialTheme.typography.displayMedium, color = accent, fontWeight = FontWeight.Light
+                        text = if (lang.name == "FA") "تبلیغ در دسترس نیست"
+                               else "Ad not available",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.SemiBold
                     )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth().height(80.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(accent.copy(alpha = 0.06f))
-                            .border(1.dp, accent.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("جای تبلیغ", color = TextMuted, style = MaterialTheme.typography.bodyMedium)
-                    }
+                    Text(
+                        text = if (lang.name == "FA") "اتصال اینترنت را بررسی کنید."
+                               else "Please check your internet connection.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = err,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted,
+                        textAlign = TextAlign.Center
+                    )
+                    PrimaryActionButton(
+                        if (lang.name == "FA") "بستن" else "Close",
+                        accent
+                    ) { adError = null }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun HintCard(text: String, accent: Color) {
-    if (text.isEmpty()) return
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(accent.copy(alpha = 0.08f))
-            .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-            .padding(12.dp)
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Filled.Lightbulb, null, tint = accent, modifier = Modifier.size(18.dp))
-            Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
+// ═══════════════════════════════════════════════════════════════
+// Helper composables — TOP-LEVEL (not nested!)
+// ═══════════════════════════════════════════════════════════════
 
 @Composable
 private fun TimerChip(seconds: Int, accent: Color) {
@@ -553,14 +633,14 @@ private fun TimerChip(seconds: Int, accent: Color) {
 }
 
 @Composable
-private fun SequenceDisplay(sequence: String, accent: Color) {
+private fun SequenceDisplay(sequence: String, accent: Color, label: String) {
     val parts = sequence.split(",").map { it.trim() }.filter { it.isNotEmpty() }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("دنباله را کامل کنید", style = MaterialTheme.typography.bodyMedium, color = TextMuted)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = TextMuted)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -574,10 +654,14 @@ private fun SequenceDisplay(sequence: String, accent: Color) {
                         modifier = Modifier
                             .size(if (p.length > 2) 52.dp else 42.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (isQ) accent.copy(alpha = 0.06f) else accent.copy(alpha = 0.14f))
+                            .background(
+                                if (isQ) accent.copy(alpha = 0.06f)
+                                else accent.copy(alpha = 0.14f)
+                            )
                             .border(
                                 if (isQ) 1.5.dp else 1.dp,
-                                if (isQ) accent.copy(alpha = 0.7f) else accent.copy(alpha = 0.35f),
+                                if (isQ) accent.copy(alpha = 0.7f)
+                                else accent.copy(alpha = 0.35f),
                                 RoundedCornerShape(12.dp)
                             ),
                         contentAlignment = Alignment.Center
@@ -587,7 +671,8 @@ private fun SequenceDisplay(sequence: String, accent: Color) {
                             color = if (isQ) accent else TextPrimary,
                             style = if (isQ) MaterialTheme.typography.headlineMedium
                                     else MaterialTheme.typography.titleLarge,
-                            fontWeight = if (isLast) FontWeight.SemiBold else FontWeight.Normal
+                            fontWeight = if (isLast) FontWeight.SemiBold
+                                        else FontWeight.Normal
                         )
                     }
                 }
@@ -597,16 +682,97 @@ private fun SequenceDisplay(sequence: String, accent: Color) {
 }
 
 @Composable
+private fun HintCard(text: String, accent: Color) {
+    if (text.isEmpty()) return
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(accent.copy(alpha = 0.08f))
+            .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.Lightbulb, null,
+                tint = accent,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = text,
+                color = TextPrimary,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun ModalOverlay(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xCC08080E)),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .widthIn(max = 380.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF12121D))
+                .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(24.dp))
+                .padding(24.dp)
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun PrimaryActionButton(text: String, accent: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(accent.copy(alpha = 0.85f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text,
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
 private fun ResultOverlay(
-    stars: Int, elapsed: Int, hintsUsed: Int, accent: Color,
-    hasNext: Boolean, onNext: () -> Unit, onBack: () -> Unit
+    stars: Int,
+    elapsed: Int,
+    hintsUsed: Int,
+    accent: Color,
+    hasNext: Boolean,
+    onNext: () -> Unit,
+    onBack: () -> Unit
 ) {
+    val strings = LocalStrings.current
     ModalOverlay {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("آفرین!", style = MaterialTheme.typography.displayMedium, color = accent, fontWeight = FontWeight.Light)
+            Text(
+                strings.wellDone,
+                style = MaterialTheme.typography.displayMedium,
+                color = accent,
+                fontWeight = FontWeight.Light
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 repeat(3) { i ->
                     Icon(
@@ -618,46 +784,25 @@ private fun ResultOverlay(
             }
             val mm = elapsed / 60
             val ss = elapsed % 60
-            Text("زمان: ${mm}:${ss.toString().padStart(2, '0')}", style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
-            if (hintsUsed > 0) Text("$hintsUsed راهنما استفاده شد", style = MaterialTheme.typography.bodyMedium, color = TextMuted)
+            Text(
+                strings.timeLabel("${mm}:${ss.toString().padStart(2, '0')}"),
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextSecondary
+            )
+            if (hintsUsed > 0) {
+                Text(
+                    strings.hintsUsedLabel(hintsUsed),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextMuted
+                )
+            }
             Spacer(Modifier.height(4.dp))
-            if (hasNext) PrimaryActionButton("مرحله‌ی بعد", accent, onNext)
-            TextButton(onClick = onBack) { Text("بازگشت به فهرست", color = TextSecondary) }
+            if (hasNext) {
+                PrimaryActionButton(strings.nextLevel, accent, onNext)
+            }
+            TextButton(onClick = onBack) {
+                Text(strings.backToList, color = TextSecondary)
+            }
         }
-    }
-}
-
-@Composable
-private fun ModalOverlay(content: @Composable () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(Color(0xCC08080E)),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .widthIn(max = 380.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFF12121D))
-                .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(24.dp))
-                .padding(24.dp)
-        ) { content() }
-    }
-}
-
-@Composable
-private fun PrimaryActionButton(text: String, accent: Color, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth().height(52.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(accent.copy(alpha = 0.85f))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text, color = Color.White,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
     }
 }

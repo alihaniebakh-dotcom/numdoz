@@ -1,9 +1,10 @@
 ﻿package ir.numdoz.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,7 +33,6 @@ import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.Videocam
-import androidx.compose.material.icons.outlined.VolumeOff as OutlinedVolumeOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,11 +57,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import ir.numdoz.AppInfo
+import ir.numdoz.ads.LocalAdManager
 import ir.numdoz.audio.LocalAudio
 import ir.numdoz.audio.Sfx
 import ir.numdoz.data.local.DataStore
+import ir.numdoz.data.model.UserSettings
 import ir.numdoz.data.model.UserWallet
 import ir.numdoz.data.model.Year
+import ir.numdoz.i18n.Lang
+import ir.numdoz.i18n.LocalLang
+import ir.numdoz.i18n.LocalStrings
+import ir.numdoz.i18n.displayTitle
 import ir.numdoz.ui.components.AnimatedLogo
 import ir.numdoz.ui.components.YearCard
 import ir.numdoz.ui.theme.LocalAccent
@@ -74,11 +80,16 @@ import kotlinx.coroutines.launch
 @Composable
 fun YearListScreen(
     dataStore: DataStore,
+    currentLang: Lang,
+    onLanguageChange: (Lang) -> Unit,
     onTintChange: (Color?) -> Unit,
     onYearClick: (String) -> Unit
 ) {
     val audio = LocalAudio.current
+    val adManager = LocalAdManager.current
     val accent = LocalAccent.current
+    val strings = LocalStrings.current
+    val lang = LocalLang.current
     val scope = rememberCoroutineScope()
 
     var ready by remember { mutableStateOf(false) }
@@ -88,11 +99,11 @@ fun YearListScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var pendingYear by remember { mutableStateOf<Year?>(null) }
 
-    // Modal states
     var showHintModal by remember { mutableStateOf(false) }
     var showSettingsModal by remember { mutableStateOf(false) }
-    var showAd by remember { mutableStateOf(false) }
-    var adSeconds by remember { mutableIntStateOf(5) }
+    var adLoading by remember { mutableStateOf(false) }
+    var adError by remember { mutableStateOf<String?>(null) }
+    
 
     LaunchedEffect(Unit) {
         onTintChange(null)
@@ -110,26 +121,10 @@ fun YearListScreen(
         } finally { loading = false }
     }
 
-    // Ad countdown
-    LaunchedEffect(showAd) {
-        if (!showAd) return@LaunchedEffect
-        adSeconds = 5
-        while (adSeconds > 0) {
-            delay(1000)
-            adSeconds--
-        }
-        wallet = wallet.copy(
-            freeHints = wallet.freeHints + 1,
-            totalAdsWatched = wallet.totalAdsWatched + 1
-        )
-        scope.launch { dataStore.updateWallet(wallet) }
-        showAd = false
-        audio.playSfx(Sfx.CORRECT)
-    }
+    
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // ═════ 1. SCROLLABLE CONTENT (draw FIRST = behind buttons) ═════
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -160,7 +155,7 @@ fun YearListScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "عددچین",
+                        text = strings.tagline,
                         style = MaterialTheme.typography.titleLarge,
                         color = TextSecondary
                     )
@@ -182,7 +177,7 @@ fun YearListScreen(
 
             AnimatedVisibility(visible = ready, enter = fadeIn(tween(500, delayMillis = 500))) {
                 Text(
-                    text = "سال‌ها",
+                    text = strings.yearsLabel,
                     style = MaterialTheme.typography.labelLarge,
                     color = TextMuted,
                     modifier = Modifier.fillMaxWidth()
@@ -199,7 +194,7 @@ fun YearListScreen(
                 }
 
                 error != null -> Text(
-                    text = "خطا: $error",
+                    text = "Error: $error",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xFFF87171),
                     textAlign = TextAlign.Center
@@ -220,11 +215,12 @@ fun YearListScreen(
                                     )
                         ) {
                             YearCard(
-                                title = y.titleFa,
-                                titleEn = y.titleEn,
+                                title = y.displayTitle(lang),
+                                titleEn = if (lang == Lang.FA) y.titleEn else y.titleFa,
                                 accent = yColor,
                                 logoName = y.logoName,
                                 locked = y.isLocked,
+                                comingSoonLabel = strings.comingSoon,
                                 onClick = {
                                     audio.playSfx(Sfx.CLICK)
                                     scope.launch {
@@ -244,7 +240,6 @@ fun YearListScreen(
             Spacer(Modifier.height(48.dp))
         }
 
-        // ═════ 2. TOP BAR (draw LAST = on top, gets clicks first) ═════
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -253,7 +248,6 @@ fun YearListScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Hint chip
             HomeHintChip(
                 count = wallet.freeHints,
                 accent = accent,
@@ -263,23 +257,14 @@ fun YearListScreen(
                     showHintModal = true
                 }
             )
-
             Spacer(Modifier.size(2.dp))
-
-            // Settings
             IconButton(onClick = {
                 audio.playSfx(Sfx.CLICK)
                 showHintModal = false
                 showSettingsModal = true
             }) {
-                Icon(
-                    imageVector = Icons.Outlined.Settings,
-                    contentDescription = "Settings",
-                    tint = TextSecondary
-                )
+                Icon(Icons.Outlined.Settings, "Settings", tint = TextSecondary)
             }
-
-            // Sound
             IconButton(onClick = {
                 audio.playSfx(Sfx.CLICK)
                 audio.toggleMute()
@@ -293,16 +278,27 @@ fun YearListScreen(
             }
         }
 
-        // ═════ 3. MODALS (draw LAST LAST = absolutely on top) ═════
         if (showHintModal) {
             HomeHintModal(
                 wallet = wallet,
                 accent = accent,
                 onWatchAd = {
                     showHintModal = false
-                    showAd = true
+                    adLoading = true
+                    adError = null
+                    adManager.showRewarded(
+                        onRewarded = {
+                            wallet = wallet.copy(
+                                freeHints = wallet.freeHints + 1,
+                                totalAdsWatched = wallet.totalAdsWatched + 1
+                            )
+                            scope.launch { dataStore.updateWallet(wallet) }
+                        },
+                        onClosed = { adLoading = false },
+                        onFailed = { msg -> adLoading = false; adError = msg }
+                    )
                 },
-                onBuy = { /* placeholder */ },
+                onBuy = {},
                 onClose = {
                     audio.playSfx(Sfx.CLICK)
                     showHintModal = false
@@ -312,10 +308,20 @@ fun YearListScreen(
 
         if (showSettingsModal) {
             HomeSettingsModal(
-                wallet = wallet,
+                currentLang = currentLang,
                 accent = accent,
                 isMuted = audio.isMuted,
                 onToggleSound = { audio.toggleMute() },
+                onToggleLanguage = {
+                    val newLang = if (currentLang == Lang.FA) Lang.EN else Lang.FA
+                    onLanguageChange(newLang)
+                    scope.launch {
+                        val current = dataStore.getSettings()
+                        dataStore.updateSettings(current.copy(
+                            language = if (newLang == Lang.FA) "fa" else "en"
+                        ))
+                    }
+                },
                 onClose = {
                     audio.playSfx(Sfx.CLICK)
                     showSettingsModal = false
@@ -323,18 +329,37 @@ fun YearListScreen(
             )
         }
 
-        if (showAd) {
-            HomeAdOverlay(adSeconds = adSeconds, accent = accent)
+        if (adLoading) {
+            AdLoadingOverlay(accent = accent)
+        }
+
+        adError?.let { err ->
+            AdErrorModal(
+                errorMessage = err,
+                accent = accent,
+                onRetry = { adError = null; adLoading = true; adManager.showRewarded(
+                    onRewarded = {
+                        wallet = wallet.copy(
+                            freeHints = wallet.freeHints + 1,
+                            totalAdsWatched = wallet.totalAdsWatched + 1
+                        )
+                        scope.launch { dataStore.updateWallet(wallet) }
+                    },
+                    onClosed = { adLoading = false },
+                    onFailed = { msg -> adLoading = false; adError = msg }
+                ) },
+                onClose = { adError = null }
+            )
         }
 
         pendingYear?.let { y ->
             IntroDialog(
                 logoName = y.logoName,
                 accent = parseHex(y.accentColorHex) ?: accent,
-                title = y.titleFa,
-                subtitle = y.titleEn,
-                description = y.descriptionFa,
-                buttonLabel = "ورود به سال",
+                title = y.displayTitle(lang),
+                subtitle = if (lang == Lang.FA) y.titleEn else y.titleFa,
+                description = if (lang == Lang.FA) y.descriptionFa else y.descriptionEn,
+                buttonLabel = strings.enterYear,
                 onDismiss = {
                     val id = y.id
                     pendingYear = null
@@ -348,14 +373,9 @@ fun YearListScreen(
     }
 }
 
-// ─────────────── Home Hint Chip ───────────────
-
 @Composable
-private fun HomeHintChip(
-    count: Int,
-    accent: Color,
-    onClick: () -> Unit
-) {
+private fun HomeHintChip(count: Int, accent: Color, onClick: () -> Unit) {
+    val strings = LocalStrings.current
     val hasHints = count > 0
     val fg = if (hasHints) accent else TextMuted
     val bgAlpha = if (hasHints) 0.15f else 0.06f
@@ -378,15 +398,13 @@ private fun HomeHintChip(
             modifier = Modifier.size(16.dp)
         )
         Text(
-            text = if (hasHints) "راهنما · $count" else "بدون راهنما",
+            text = if (hasHints) strings.hintWithCount(count) else strings.noHintsLabel,
             style = MaterialTheme.typography.labelLarge,
             color = fg,
             fontWeight = if (hasHints) FontWeight.SemiBold else FontWeight.Normal
         )
     }
 }
-
-// ─────────────── Hint Modal ───────────────
 
 @Composable
 private fun HomeHintModal(
@@ -396,6 +414,7 @@ private fun HomeHintModal(
     onBuy: () -> Unit,
     onClose: () -> Unit
 ) {
+    val strings = LocalStrings.current
     val hasHints = wallet.freeHints > 0
     ModalScaffold(accent = accent) {
         Box(
@@ -413,14 +432,12 @@ private fun HomeHintModal(
                 modifier = Modifier.size(36.dp)
             )
         }
-
         Text(
-            text = "راهنما",
+            text = strings.hintLabel,
             style = MaterialTheme.typography.headlineMedium,
             color = TextPrimary,
             fontWeight = FontWeight.SemiBold
         )
-
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(14.dp))
@@ -429,56 +446,47 @@ private fun HomeHintModal(
                 .padding(horizontal = 18.dp, vertical = 8.dp)
         ) {
             Text(
-                text = if (hasHints) "دارای ${wallet.freeHints} راهنما" else "بدون راهنما",
+                text = if (hasHints) strings.youHaveNHints(wallet.freeHints) else strings.noHintsLabel,
                 style = MaterialTheme.typography.titleMedium,
                 color = accent
             )
         }
-
         Text(
-            text = if (hasHints)
-                "هنگام بازی با کلیک روی آیکون راهنما، یک عدد از این تعداد کم می‌شود."
-            else
-                "برای دریافت راهنما می‌توانید یک تبلیغ کوتاه ببینید یا راهنما خریداری کنید.",
+            text = if (hasHints) strings.hintModalDesc else strings.hintModalDescEmpty,
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
             textAlign = TextAlign.Center
         )
-
-        // Watch ad button
         ModalActionButton(
-            text = "تماشای تبلیغ — دریافت ۱ راهنما",
+            text = strings.watchAdForHint,
             icon = { Icon(Icons.Outlined.Videocam, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
             accent = accent,
             primary = true,
             onClick = onWatchAd
         )
-
-        // Buy (placeholder)
         ModalActionButton(
-            text = "خرید راهنما (به‌زودی)",
+            text = strings.buyHintComing,
             icon = { Icon(Icons.Outlined.ShoppingCart, null, tint = TextMuted, modifier = Modifier.size(20.dp)) },
             accent = accent,
             primary = false,
             onClick = onBuy
         )
-
         TextButton(onClick = onClose) {
-            Text("بستن", color = TextSecondary)
+            Text(strings.close, color = TextSecondary)
         }
     }
 }
 
-// ─────────────── Settings Modal ───────────────
-
 @Composable
 private fun HomeSettingsModal(
-    wallet: UserWallet,
+    currentLang: Lang,
     accent: Color,
     isMuted: Boolean,
     onToggleSound: () -> Unit,
+    onToggleLanguage: () -> Unit,
     onClose: () -> Unit
 ) {
+    val strings = LocalStrings.current
     ModalScaffold(accent = accent) {
         Box(
             modifier = Modifier
@@ -488,26 +496,20 @@ private fun HomeSettingsModal(
                 .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Settings,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(36.dp)
-            )
+            Icon(Icons.Outlined.Settings, null, tint = accent, modifier = Modifier.size(36.dp))
         }
-
         Text(
-            text = "تنظیمات",
+            text = strings.settingsTitle,
             style = MaterialTheme.typography.headlineMedium,
             color = TextPrimary,
             fontWeight = FontWeight.SemiBold
         )
-
         SettingsRow(
             icon = { Icon(Icons.Outlined.Language, null, tint = accent, modifier = Modifier.size(20.dp)) },
-            label = "زبان",
-            value = "فارسی (به‌زودی)",
-            muted = true
+            label = strings.languageLabel,
+            value = if (currentLang == Lang.FA) strings.languageFa else strings.languageEn,
+            onClick = onToggleLanguage,
+            muted = false
         )
         SettingsRow(
             icon = {
@@ -519,25 +521,24 @@ private fun HomeSettingsModal(
                     modifier = Modifier.size(20.dp)
                 )
             },
-            label = "صدا",
-            value = if (isMuted) "خاموش" else "روشن",
+            label = strings.soundLabel,
+            value = if (isMuted) strings.soundOff else strings.soundOn,
             onClick = onToggleSound
         )
         SettingsRow(
             icon = { Icon(Icons.Outlined.RestartAlt, null, tint = TextMuted, modifier = Modifier.size(20.dp)) },
-            label = "بازنشانی پیشرفت",
-            value = "به‌زودی",
+            label = strings.resetProgressLabel,
+            value = strings.comingSoonShort,
             muted = true
         )
         SettingsRow(
             icon = { Icon(Icons.Outlined.Info, null, tint = accent, modifier = Modifier.size(20.dp)) },
-            label = "درباره",
+            label = strings.aboutLabel,
             value = "NumDoz v${AppInfo.VERSION_NAME}",
             muted = false
         )
-
         TextButton(onClick = onClose) {
-            Text("بستن", color = TextSecondary)
+            Text(strings.close, color = TextSecondary)
         }
     }
 }
@@ -578,10 +579,9 @@ private fun SettingsRow(
     }
 }
 
-// ─────────────── Ad Overlay ───────────────
-
 @Composable
 private fun HomeAdOverlay(adSeconds: Int, accent: Color) {
+    val strings = LocalStrings.current
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -600,13 +600,9 @@ private fun HomeAdOverlay(adSeconds: Int, accent: Color) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Text(strings.ad, style = MaterialTheme.typography.labelLarge, color = TextMuted)
             Text(
-                text = "تبلیغ",
-                style = MaterialTheme.typography.labelLarge,
-                color = TextMuted
-            )
-            Text(
-                text = "شمارش معکوس: $adSeconds",
+                text = strings.countdown(adSeconds),
                 style = MaterialTheme.typography.displayMedium,
                 color = accent,
                 fontWeight = FontWeight.Light
@@ -620,14 +616,10 @@ private fun HomeAdOverlay(adSeconds: Int, accent: Color) {
                     .border(1.dp, accent.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "جای تبلیغ",
-                    color = TextMuted,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text(strings.ad, color = TextMuted, style = MaterialTheme.typography.bodyMedium)
             }
             Text(
-                text = "بعد از شمارش، ۱ راهنما به شما داده می‌شود",
+                text = strings.adRewardMessage,
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
                 textAlign = TextAlign.Center
@@ -636,13 +628,8 @@ private fun HomeAdOverlay(adSeconds: Int, accent: Color) {
     }
 }
 
-// ─────────────── Shared Helpers ───────────────
-
 @Composable
-private fun ModalScaffold(
-    accent: Color,
-    content: @Composable () -> Unit
-) {
+private fun ModalScaffold(accent: Color, content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -705,3 +692,108 @@ private fun parseHex(hex: String): Color? = try {
     val h = hex.removePrefix("#")
     if (h.length == 6) Color(0xFF000000 or h.toLong(16)) else null
 } catch (_: Throwable) { null }
+
+@Composable
+private fun AdLoadingOverlay(accent: Color) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xCC08080E))
+            .zIndex(20f),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 320.dp)
+                .padding(24.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF12121D))
+                .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CircularProgressIndicator(color = accent, strokeWidth = 3.dp)
+            Text(
+                text = "در حال بارگذاری تبلیغ…",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextSecondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdErrorModal(
+    errorMessage: String,
+    accent: Color,
+    onRetry: () -> Unit,
+    onClose: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xCC08080E))
+            .zIndex(20f),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 360.dp)
+                .padding(24.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF12121D))
+                .border(1.dp, Color(0xFFF87171).copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = "تبلیغ در دسترس نیست",
+                style = MaterialTheme.typography.headlineMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "لطفاً اتصال اینترنت را بررسی کنید یا لحظه‌ای بعد دوباره تلاش کنید.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
+                color = TextMuted,
+                textAlign = TextAlign.Center
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1A1A28))
+                        .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(12.dp))
+                        .clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("بستن", color = TextSecondary, style = MaterialTheme.typography.titleMedium)
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(accent.copy(alpha = 0.85f))
+                        .clickable(onClick = onRetry),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("تلاش دوباره", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}

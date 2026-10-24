@@ -14,9 +14,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import ir.numdoz.ads.LocalAdManager
+import ir.numdoz.ads.createAdManager
 import ir.numdoz.audio.LocalAudio
 import ir.numdoz.audio.rememberAudioManager
 import ir.numdoz.data.local.createDataStore
+import ir.numdoz.i18n.Lang
+import ir.numdoz.i18n.LocalLang
+import ir.numdoz.i18n.LocalStrings
+import ir.numdoz.i18n.stringsFor
 import ir.numdoz.ui.components.FloatingNumbers
 import ir.numdoz.ui.components.MinimalBackground
 import ir.numdoz.ui.navigation.Screen
@@ -35,19 +41,26 @@ import ir.numdoz.ui.theme.spectrumColor
 @Composable
 fun App() {
     val audio = rememberAudioManager()
+    val adManager = remember { createAdManager() }
     val dataStore = remember { createDataStore() }
     var screen by remember { mutableStateOf<Screen>(Screen.Splash) }
     var tint by remember { mutableStateOf<Color?>(null) }
+    var lang by remember { mutableStateOf(Lang.FA) }
 
-    // Preload DB during splash
     LaunchedEffect(Unit) {
         try {
+            adManager.initialize()
             dataStore.ensureSchema()
             dataStore.seedIfEmpty()
+            val settings = dataStore.getSettings()
+            lang = if (settings.language == "en") Lang.EN else Lang.FA
+            println("[NumDoz/app] boot complete, lang=${lang.name}")
         } catch (t: Throwable) {
-            println("[NumDoz/app] DB init error: ${t.message}")
+            println("[NumDoz/app] boot error: ${t.message}")
         }
     }
+
+    val strings = remember(lang) { stringsFor(lang) }
 
     val hueA = rememberSpectrumHue(cycleSeconds = 120, phaseOffset = 0f)
     val hueB = rememberSpectrumHue(cycleSeconds = 120, phaseOffset = 180f)
@@ -56,8 +69,11 @@ fun App() {
 
     CompositionLocalProvider(
         LocalAudio provides audio,
+        LocalAdManager provides adManager,
         LocalAccent provides accentA,
-        LocalAccentAlt provides accentB
+        LocalAccentAlt provides accentB,
+        LocalLang provides lang,
+        LocalStrings provides strings
     ) {
         NumDozTheme {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -76,13 +92,13 @@ fun App() {
                                         screen = Screen.YearList
                                     }
                                 )
-
                                 Screen.YearList -> YearListScreen(
                                     dataStore = dataStore,
+                                    currentLang = lang,
+                                    onLanguageChange = { newLang -> lang = newLang },
                                     onTintChange = { tint = it },
                                     onYearClick = { yearId -> screen = Screen.Chapters(yearId) }
                                 )
-
                                 is Screen.Chapters -> ChaptersScreen(
                                     yearId = s.yearId,
                                     dataStore = dataStore,
@@ -95,7 +111,6 @@ fun App() {
                                         screen = Screen.ChapterMonths(s.yearId, chId)
                                     }
                                 )
-
                                 is Screen.ChapterMonths -> ChapterMonthsScreen(
                                     yearId = s.yearId,
                                     chapterId = s.chapterId,
@@ -106,7 +121,6 @@ fun App() {
                                         screen = Screen.MonthDays(s.yearId, s.chapterId, secId)
                                     }
                                 )
-
                                 is Screen.MonthDays -> MonthDaysScreen(
                                     yearId = s.yearId,
                                     chapterId = s.chapterId,
@@ -118,7 +132,6 @@ fun App() {
                                         screen = Screen.LevelPlay(lvId, s.chapterId, s.sectionId, s.yearId)
                                     }
                                 )
-
                                 is Screen.LevelPlay -> LevelPlayScreen(
                                     levelId = s.levelId,
                                     chapterId = s.chapterId,
