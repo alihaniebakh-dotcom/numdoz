@@ -47,7 +47,7 @@ compose.resources {
 
 android {
     namespace = "ir.numdoz"
-    compileSdk = 34
+    compileSdk = 35
     defaultConfig {
         addManifestPlaceholders(
             mapOf(

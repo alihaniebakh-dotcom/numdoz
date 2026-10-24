@@ -10,7 +10,6 @@ jobs:
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -Dorg.gradle.daemon=false"
     steps:
       - uses: actions/checkout@v4
 
@@ -19,17 +18,23 @@ jobs:
           distribution: 'temurin'
           java-version: '22'
 
-      - name: Verify Android SDK
-        run: |
-          echo "ANDROID_HOME: $ANDROID_HOME"
-          ls $ANDROID_HOME/platforms || echo "no platforms"
-
-      - name: Accept licenses
+      - name: Accept Android licenses
         run: |
           SDKMANAGER=$(find $ANDROID_HOME/cmdline-tools -name sdkmanager -type f 2>/dev/null | head -1)
           if [ -n "$SDKMANAGER" ]; then
             yes | "$SDKMANAGER" --licenses 2>&1 | tail -3 || true
           fi
+
+      - name: Install Android SDK 35
+        run: |
+          SDKMANAGER=$(find $ANDROID_HOME/cmdline-tools -name sdkmanager -type f 2>/dev/null | head -1)
+          if [ -n "$SDKMANAGER" ]; then
+            "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" 2>&1 | tail -10 || true
+          fi
+          echo "─── platforms available ───"
+          ls $ANDROID_HOME/platforms || echo "none"
+          echo "─── build-tools available ───"
+          ls $ANDROID_HOME/build-tools || echo "none"
 
       - uses: gradle/actions/setup-gradle@v3
         with:
@@ -42,7 +47,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build Debug APK
-        run: ./gradlew :composeApp:assembleDebug --stacktrace -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g"
+        run: ./gradlew :composeApp:assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
