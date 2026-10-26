@@ -1,4 +1,4 @@
-﻿package ir.numdoz.data.local
+package ir.numdoz.data.local
 
 import android.content.ContentValues
 import android.content.Context
@@ -13,6 +13,8 @@ import ir.numdoz.data.model.LevelProgress
 import ir.numdoz.data.model.PuzzleType
 import ir.numdoz.data.model.Section
 import ir.numdoz.data.model.SectionStats
+import ir.numdoz.data.model.UserProfile
+import ir.numdoz.data.model.UserStats
 import ir.numdoz.data.model.UserSettings
 import ir.numdoz.data.model.UserWallet
 import ir.numdoz.data.model.Year
@@ -117,6 +119,17 @@ class AndroidDataStore(context: Context) :
             )
         """.trimIndent())
         db.execSQL("""
+            CREATE TABLE user_profile (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                username TEXT NOT NULL DEFAULT '',
+                avatar_id INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT 0,
+                last_login_at INTEGER NOT NULL DEFAULT 0,
+                total_sessions INTEGER NOT NULL DEFAULT 0,
+                edit_count INTEGER NOT NULL DEFAULT 0
+            )
+        """.trimIndent())
+        db.execSQL("""
             CREATE TABLE user_settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
@@ -133,6 +146,34 @@ class AndroidDataStore(context: Context) :
     override suspend fun ensureSchema() = withContext(Dispatchers.IO) {
         writableDatabase // triggers onCreate if first time
         Log.d(TAG, "schema ensured")
+        // migrations: add new columns if missing
+        try {
+            val db = writableDatabase
+            val hasBoost = db.rawQuery("PRAGMA table_info(user_wallet)", null).use { c ->
+                while (c.moveToNext()) if (c.getString(c.getColumnIndexOrThrow("name")) == "free_time_boosts") return@use true
+                false
+            }
+            if (!hasBoost) {
+                db.execSQL("ALTER TABLE user_wallet ADD COLUMN free_time_boosts INTEGER NOT NULL DEFAULT 3")
+                Log.d(TAG, "migration: +free_time_boosts")
+            }
+            val hasTimeout = db.rawQuery("PRAGMA table_info(level_progress)", null).use { c ->
+                while (c.moveToNext()) if (c.getString(c.getColumnIndexOrThrow("name")) == "timeout_occurred") return@use true
+                false
+            }
+            if (!hasTimeout) {
+                db.execSQL("ALTER TABLE level_progress ADD COLUMN timeout_occurred INTEGER NOT NULL DEFAULT 0")
+                Log.d(TAG, "migration: +timeout_occurred")
+            }
+        } catch
+            val hasTimeLeft = db.rawQuery("PRAGMA table_info(level_progress)", null).use { c ->
+                while (c.moveToNext()) if (c.getString(c.getColumnIndexOrThrow("name")) == "time_left_seconds") return@use true
+                false
+            }
+            if (!hasTimeLeft) {
+                db.execSQL("ALTER TABLE level_progress ADD COLUMN time_left_seconds INTEGER NOT NULL DEFAULT -1")
+                Log.d(TAG, "migration: +time_left_seconds")
+            } (t: Throwable) { Log.e(TAG, "migration failed", t) }
         Unit
     }
 
@@ -290,7 +331,9 @@ class AndroidDataStore(context: Context) :
             stars = maxOf(existing.stars, progress.stars),
             hintsUsed = progress.hintsUsed,
             timeExtensionsUsed = progress.timeExtensionsUsed,
-            lastPlayedAt = progress.lastPlayedAt
+            lastPlayedAt = progress.lastPlayedAt,
+            timeoutOccurred = progress.timeoutOccurred,
+            timeLeftSeconds = progress.timeLeftSeconds
         )
 
         val cv = ContentValues().apply {
@@ -301,6 +344,8 @@ class AndroidDataStore(context: Context) :
             put("hints_used", merged.hintsUsed)
             put("time_extensions_used", merged.timeExtensionsUsed)
             put("last_played_at", merged.lastPlayedAt)
+            put("timeout_occurred", if (merged.timeoutOccurred) 1 else 0)
+            put("time_left_seconds", merged.timeLeftSeconds)
         }
         db.insertWithOnConflict("level_progress", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
         Unit
@@ -347,6 +392,7 @@ class AndroidDataStore(context: Context) :
             if (c.moveToFirst()) UserWallet(
                 freeHints = c.i("free_hints"),
                 freeTimeExtensions = c.i("free_time_extensions"),
+                freeTimeBoosts = c.i("free_time_boosts"),
                 totalAdsWatched = c.i("total_ads_watched"),
                 coins = c.i("coins")
             ) else UserWallet()
@@ -358,8 +404,11 @@ class AndroidDataStore(context: Context) :
             put("id", 1)
             put("free_hints", wallet.freeHints)
             put("free_time_extensions", wallet.freeTimeExtensions)
+            put("free_time_boosts", wallet.freeTimeBoosts)
             put("total_ads_watched", wallet.totalAdsWatched)
             put("coins", wallet.coins)
+            put("last_daily_reward_claim_ms", wallet.lastDailyRewardClaimMs)
+            put("app_sessions", wallet.appSessions)
         }
         writableDatabase.insertWithOnConflict("user_wallet", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
         Unit
@@ -399,6 +448,52 @@ class AndroidDataStore(context: Context) :
         db.insertWithOnConflict("user_settings", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    override suspend fun getProfile(): UserProfile = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery("SELECT * FROM user_profile WHERE id = 1", null).use { c ->
+            if (c.moveToFirst()) UserProfile(
+                username = c.s("username"),
+                avatarId = c.i("avatar_id"),
+                createdAt = c.l("created_at"),
+                lastLoginAt = c.l("last_login_at"),
+                totalSessions = c.i("total_sessions"),
+                editCount = c.i("edit_count")
+            ) else UserProfile()
+        }
+    }
+
+    override suspend fun updateProfile(profile: UserProfile) = withContext(Dispatchers.IO) {
+        val cv = ContentValues().apply {
+            put("id", 1)
+            put("username", profile.username)
+            put("avatar_id", profile.avatarId)
+            put("created_at", profile.createdAt)
+            put("last_login_at", profile.lastLoginAt)
+            put("total_sessions", profile.totalSessions)
+            put("edit_count", profile.editCount)
+        }
+        writableDatabase.insertWithOnConflict("user_profile", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+        Unit
+    }
+
+    override suspend fun getUserStats(): UserStats = withContext(Dispatchers.IO) {
+        val db = readableDatabase
+        val levels = db.rawQuery("SELECT COUNT(*) FROM level_progress WHERE completed = 1", null).use { c ->
+            if (c.moveToFirst()) c.getInt(0) else 0
+        }
+        val stars = db.rawQuery("SELECT COALESCE(SUM(stars), 0) FROM level_progress WHERE completed = 1", null).use { c ->
+            if (c.moveToFirst()) c.getInt(0) else 0
+        }
+        val hints = db.rawQuery("SELECT COALESCE(SUM(hints_used), 0) FROM level_progress WHERE completed = 1", null).use { c ->
+            if (c.moveToFirst()) c.getInt(0) else 0
+        }
+        val createdAt = db.rawQuery("SELECT created_at FROM user_profile WHERE id = 1", null).use { c ->
+            if (c.moveToFirst()) c.getLong(0) else 0L
+        }
+        val days = if (createdAt > 0)
+            ((System.currentTimeMillis() - createdAt) / (1000L * 60 * 60 * 24)).coerceAtLeast(0)
+        else 0L
+        UserStats(levels, stars, hints, days)
+    }
     override suspend fun isIntroSeen(key: String): Boolean = withContext(Dispatchers.IO) {
         readableDatabase.rawQuery(
             "SELECT value FROM user_settings WHERE key = ?", arrayOf("intro_$key")
@@ -456,6 +551,8 @@ class AndroidDataStore(context: Context) :
         stars = i("stars"),
         hintsUsed = i("hints_used"),
         timeExtensionsUsed = i("time_extensions_used"),
-        lastPlayedAt = l("last_played_at")
+        lastPlayedAt = l("last_played_at"),
+        timeoutOccurred = runCatching { i("timeout_occurred") != 0 }.getOrDefault(false),
+        timeLeftSeconds = runCatching { i("time_left_seconds") }.getOrDefault(-1)
     )
 }

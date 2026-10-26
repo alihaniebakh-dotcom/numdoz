@@ -1,4 +1,4 @@
-﻿package ir.numdoz.data.local
+package ir.numdoz.data.local
 
 import ir.numdoz.data.model.Chapter
 import ir.numdoz.data.model.ChapterStats
@@ -7,6 +7,8 @@ import ir.numdoz.data.model.LevelProgress
 import ir.numdoz.data.model.PuzzleType
 import ir.numdoz.data.model.Section
 import ir.numdoz.data.model.SectionStats
+import ir.numdoz.data.model.UserProfile
+import ir.numdoz.data.model.UserStats
 import ir.numdoz.data.model.UserSettings
 import ir.numdoz.data.model.UserWallet
 import ir.numdoz.data.model.Year
@@ -100,13 +102,52 @@ class SqliteDataStore(private val dbPath: String) : DataStore {
                     )
                 """.trimIndent())
                 st.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS user_profile (
+                        id INTEGER PRIMARY KEY CHECK (id = 1),
+                        username TEXT NOT NULL DEFAULT '',
+                        avatar_id INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL DEFAULT 0,
+                        last_login_at INTEGER NOT NULL DEFAULT 0,
+                        total_sessions INTEGER NOT NULL DEFAULT 0
+                    )
+                """.trimIndent())
+
+                st.executeUpdate("""
                     CREATE TABLE IF NOT EXISTS user_settings (
                         key TEXT PRIMARY KEY, value TEXT NOT NULL
                     )
                 """.trimIndent())
             }
         }
-        println("[NumDoz/db] schema ensured")
+                        println("[NumDoz/db] schema ensured")
+
+        // ── migrations ──
+        connect().use { c2 ->
+            if (!hasColumn(c2, "user_wallet", "free_time_boosts")) {
+                c2.createStatement().use { it.executeUpdate("ALTER TABLE user_wallet ADD COLUMN free_time_boosts INTEGER NOT NULL DEFAULT 3") }
+                println("[NumDoz/db] migration: +free_time_boosts")
+            }
+            if (!hasColumn(c2, "user_wallet", "last_daily_reward_claim_ms")) {
+                c2.createStatement().use { it.executeUpdate("ALTER TABLE user_wallet ADD COLUMN last_daily_reward_claim_ms INTEGER NOT NULL DEFAULT 0") }
+                println("[NumDoz/db] migration: +last_daily_reward_claim_ms")
+            }
+            if (!hasColumn(c2, "user_profile", "edit_count")) {
+                c2.createStatement().use { it.executeUpdate("ALTER TABLE user_profile ADD COLUMN edit_count INTEGER NOT NULL DEFAULT 0") }
+                println("[NumDoz/db] migration: +edit_count")
+            }
+            if (!hasColumn(c2, "user_wallet", "app_sessions")) {
+                c2.createStatement().use { it.executeUpdate("ALTER TABLE user_wallet ADD COLUMN app_sessions INTEGER NOT NULL DEFAULT 0") }
+                println("[NumDoz/db] migration: +app_sessions")
+            }
+            if (!hasColumn(c2, "level_progress", "timeout_occurred")) {
+                c2.createStatement().use { it.executeUpdate("ALTER TABLE level_progress ADD COLUMN timeout_occurred INTEGER NOT NULL DEFAULT 0") }
+                println("[NumDoz/db] migration: +timeout_occurred")
+            }
+            if (!hasColumn(c2, "level_progress", "time_left_seconds")) {
+                c2.createStatement().use { it.executeUpdate("ALTER TABLE level_progress ADD COLUMN time_left_seconds INTEGER NOT NULL DEFAULT -1") }
+                println("[NumDoz/db] migration: +time_left_seconds")
+            }
+        }
     }
 
     override suspend fun seedIfEmpty() = withContext(Dispatchers.IO) {
@@ -276,16 +317,21 @@ class SqliteDataStore(private val dbPath: String) : DataStore {
     override suspend fun upsertLevelProgress(progress: LevelProgress) = withContext(Dispatchers.IO) {
         connect().use { c ->
             c.prepareStatement("""
-                INSERT INTO level_progress (level_id,completed,best_time_seconds,stars,hints_used,time_extensions_used,last_played_at)
-                VALUES (?,?,?,?,?,?,?)
+                INSERT INTO level_progress (level_id,completed,best_time_seconds,stars,hints_used,time_extensions_used,last_played_at,timeout_occurred,time_left_seconds)
+                VALUES (?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(level_id) DO UPDATE SET
                     completed = MAX(completed, excluded.completed),
-                    best_time_seconds = CASE WHEN best_time_seconds = 0 OR excluded.best_time_seconds < best_time_seconds
-                        THEN excluded.best_time_seconds ELSE best_time_seconds END,
+                    best_time_seconds = CASE 
+                        WHEN excluded.best_time_seconds = 0 THEN best_time_seconds
+                        WHEN best_time_seconds = 0 OR excluded.best_time_seconds < best_time_seconds 
+                        THEN excluded.best_time_seconds 
+                        ELSE best_time_seconds END,
                     stars = MAX(stars, excluded.stars),
                     hints_used = excluded.hints_used,
                     time_extensions_used = excluded.time_extensions_used,
-                    last_played_at = excluded.last_played_at
+                    last_played_at = excluded.last_played_at,
+                    timeout_occurred = excluded.timeout_occurred,
+                    time_left_seconds = excluded.time_left_seconds
             """.trimIndent()).use { ps ->
                 ps.setString(1, progress.levelId)
                 ps.setInt(2, if (progress.completed) 1 else 0)
@@ -294,6 +340,8 @@ class SqliteDataStore(private val dbPath: String) : DataStore {
                 ps.setInt(5, progress.hintsUsed)
                 ps.setInt(6, progress.timeExtensionsUsed)
                 ps.setLong(7, progress.lastPlayedAt)
+                ps.setInt(8, if (progress.timeoutOccurred) 1 else 0)
+                ps.setInt(9, progress.timeLeftSeconds)
                 ps.executeUpdate()
                 Unit
             }
@@ -360,8 +408,13 @@ class SqliteDataStore(private val dbPath: String) : DataStore {
             c.createStatement().use { st ->
                 st.executeQuery("SELECT * FROM user_wallet WHERE id = 1").use { rs ->
                     if (rs.next()) UserWallet(
-                        rs.getInt("free_hints"), rs.getInt("free_time_extensions"),
-                        rs.getInt("total_ads_watched"), rs.getInt("coins")
+                        freeHints = rs.getInt("free_hints"),
+                        freeTimeExtensions = rs.getInt("free_time_extensions"),
+                        freeTimeBoosts = rs.getInt("free_time_boosts"),
+                        totalAdsWatched = rs.getInt("total_ads_watched"),
+                        coins = rs.getInt("coins"),
+                        lastDailyRewardClaimMs = rs.getLong("last_daily_reward_claim_ms"),
+                        appSessions = rs.getInt("app_sessions")
                     ) else UserWallet()
                 }
             }
@@ -371,16 +424,22 @@ class SqliteDataStore(private val dbPath: String) : DataStore {
     override suspend fun updateWallet(wallet: UserWallet) = withContext(Dispatchers.IO) {
         connect().use { c ->
             c.prepareStatement("""
-                INSERT INTO user_wallet (id,free_hints,free_time_extensions,total_ads_watched,coins)
-                VALUES (1,?,?,?,?)
+                INSERT INTO user_wallet (id,free_hints,free_time_extensions,free_time_boosts,total_ads_watched,coins,last_daily_reward_claim_ms,app_sessions)
+                VALUES (1,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
                     free_hints = excluded.free_hints,
                     free_time_extensions = excluded.free_time_extensions,
+                    free_time_boosts = excluded.free_time_boosts,
                     total_ads_watched = excluded.total_ads_watched,
-                    coins = excluded.coins
+                    coins = excluded.coins,
+                    last_daily_reward_claim_ms = excluded.last_daily_reward_claim_ms,
+                    app_sessions = excluded.app_sessions
             """.trimIndent()).use { ps ->
                 ps.setInt(1, wallet.freeHints); ps.setInt(2, wallet.freeTimeExtensions)
-                ps.setInt(3, wallet.totalAdsWatched); ps.setInt(4, wallet.coins)
+                ps.setInt(3, wallet.freeTimeBoosts)
+                ps.setInt(4, wallet.totalAdsWatched); ps.setInt(5, wallet.coins)
+                ps.setLong(6, wallet.lastDailyRewardClaimMs)
+                ps.setInt(7, wallet.appSessions)
                 ps.executeUpdate()
                 Unit
             }
@@ -468,6 +527,88 @@ class SqliteDataStore(private val dbPath: String) : DataStore {
         stars = getInt("stars"),
         hintsUsed = getInt("hints_used"),
         timeExtensionsUsed = getInt("time_extensions_used"),
-        lastPlayedAt = getLong("last_played_at")
+        lastPlayedAt = getLong("last_played_at"),
+        timeoutOccurred = runCatching { getInt("timeout_occurred") != 0 }.getOrDefault(false),
+        timeLeftSeconds = runCatching { getInt("time_left_seconds") }.getOrDefault(-1)
     )
+
+    override suspend fun getProfile(): UserProfile = withContext(Dispatchers.IO) {
+        connect().use { c ->
+            c.createStatement().use { st ->
+                st.executeQuery("SELECT * FROM user_profile WHERE id = 1").use { rs ->
+                    if (rs.next()) UserProfile(
+                        username = rs.getString("username") ?: "",
+                        avatarId = rs.getInt("avatar_id"),
+                        createdAt = rs.getLong("created_at"),
+                        lastLoginAt = rs.getLong("last_login_at"),
+                        totalSessions = rs.getInt("total_sessions"),
+                        editCount = rs.getInt("edit_count")
+                    ) else UserProfile()
+                }
+            }
+        }
+    }
+
+    override suspend fun updateProfile(profile: UserProfile) = withContext(Dispatchers.IO) {
+        connect().use { c ->
+            c.prepareStatement("""
+                INSERT INTO user_profile (id, username, avatar_id, created_at, last_login_at, total_sessions, edit_count)
+                VALUES (1,?,?,?,?,?,?)
+                ON CONFLICT(id) DO UPDATE SET
+                    username = excluded.username,
+                    avatar_id = excluded.avatar_id,
+                    created_at = excluded.created_at,
+                    last_login_at = excluded.last_login_at,
+                    total_sessions = excluded.total_sessions, edit_count = excluded.edit_count
+            """.trimIndent()).use { ps ->
+                ps.setString(1, profile.username)
+                ps.setInt(2, profile.avatarId)
+                ps.setLong(3, profile.createdAt)
+                ps.setLong(4, profile.lastLoginAt)
+                ps.setInt(5, profile.totalSessions)
+                ps.setInt(6, profile.editCount)
+                ps.executeUpdate()
+                Unit
+            }
+        }
+    }
+
+    override suspend fun getUserStats(): UserStats = withContext(Dispatchers.IO) {
+        connect().use { c ->
+            val levels = c.createStatement().use { st ->
+                st.executeQuery("SELECT COUNT(*) FROM level_progress WHERE completed = 1").use { rs ->
+                    if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+            val stars = c.createStatement().use { st ->
+                st.executeQuery("SELECT COALESCE(SUM(stars), 0) FROM level_progress WHERE completed = 1").use { rs ->
+                    if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+            val hints = c.createStatement().use { st ->
+                st.executeQuery("SELECT COALESCE(SUM(hints_used), 0) FROM level_progress WHERE completed = 1").use { rs ->
+                    if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+            val createdAt = c.createStatement().use { st ->
+                st.executeQuery("SELECT created_at FROM user_profile WHERE id = 1").use { rs ->
+                    if (rs.next()) rs.getLong(1) else 0L
+                }
+            }
+            val daysSince = if (createdAt > 0)
+                ((System.currentTimeMillis() - createdAt) / (1000L * 60 * 60 * 24)).coerceAtLeast(0)
+            else 0L
+            UserStats(levels, stars, hints, daysSince)
+        }
+    }
+    private fun hasColumn(c: Connection, table: String, col: String): Boolean {
+        c.createStatement().use { st ->
+            st.executeQuery("PRAGMA table_info($table)").use { rs ->
+                while (rs.next()) {
+                    if (rs.getString("name") == col) return true
+                }
+            }
+        }
+        return false
+    }
 }

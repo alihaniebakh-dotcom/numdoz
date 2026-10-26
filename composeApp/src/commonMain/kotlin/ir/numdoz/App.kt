@@ -1,4 +1,4 @@
-﻿package ir.numdoz
+package ir.numdoz
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -10,10 +10,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
 import ir.numdoz.ads.LocalAdManager
 import ir.numdoz.ads.createAdManager
 import ir.numdoz.audio.LocalAudio
@@ -31,9 +33,14 @@ import ir.numdoz.ui.screens.ChaptersScreen
 import ir.numdoz.ui.screens.LevelPlayScreen
 import ir.numdoz.ui.screens.MonthDaysScreen
 import ir.numdoz.ui.screens.SplashScreen
+import ir.numdoz.ui.screens.ProfileScreen
+import ir.numdoz.ui.screens.ProfileSetupScreen
+import ir.numdoz.data.model.UserProfile
+import ir.numdoz.util.currentTimeMillis
 import ir.numdoz.ui.screens.YearListScreen
 import ir.numdoz.ui.theme.LocalAccent
 import ir.numdoz.ui.theme.LocalAccentAlt
+import ir.numdoz.ui.theme.LocalAccentTertiary
 import ir.numdoz.ui.theme.NumDozTheme
 import ir.numdoz.ui.theme.rememberSpectrumHue
 import ir.numdoz.ui.theme.spectrumColor
@@ -41,11 +48,13 @@ import ir.numdoz.ui.theme.spectrumColor
 @Composable
 fun App() {
     val audio = rememberAudioManager()
+    val scope = rememberCoroutineScope()
     val adManager = remember { createAdManager() }
     val dataStore = remember { createDataStore() }
     var screen by remember { mutableStateOf<Screen>(Screen.Splash) }
     var tint by remember { mutableStateOf<Color?>(null) }
     var lang by remember { mutableStateOf(Lang.FA) }
+    var userProfile by remember { mutableStateOf(UserProfile()) }
 
     LaunchedEffect(Unit) {
         try {
@@ -54,7 +63,18 @@ fun App() {
             dataStore.seedIfEmpty()
             val settings = dataStore.getSettings()
             lang = if (settings.language == "en") Lang.EN else Lang.FA
-            println("[NumDoz/app] boot complete, lang=${lang.name}")
+
+            val loaded = dataStore.getProfile()
+            userProfile = loaded
+            if (loaded.exists) {
+                dataStore.updateProfile(
+                    loaded.copy(
+                        lastLoginAt = currentTimeMillis(),
+                        totalSessions = loaded.totalSessions + 1
+                    )
+                )
+            }
+            println("[NumDoz/app] boot complete, lang=${lang.name}, user=${loaded.username}")
         } catch (t: Throwable) {
             println("[NumDoz/app] boot error: ${t.message}")
         }
@@ -66,12 +86,15 @@ fun App() {
     val hueB = rememberSpectrumHue(cycleSeconds = 120, phaseOffset = 180f)
     val accentA = spectrumColor(hueA)
     val accentB = spectrumColor(hueB)
+    val hueC = rememberSpectrumHue(cycleSeconds = 120, phaseOffset = 100f)
+    val accentC = spectrumColor(hueC)
 
     CompositionLocalProvider(
         LocalAudio provides audio,
         LocalAdManager provides adManager,
         LocalAccent provides accentA,
         LocalAccentAlt provides accentB,
+        LocalAccentTertiary provides accentC,
         LocalLang provides lang,
         LocalStrings provides strings
     ) {
@@ -89,15 +112,41 @@ fun App() {
                                 Screen.Splash -> SplashScreen(
                                     onDone = {
                                         tint = null
-                                        screen = Screen.YearList
+                                        screen = if (userProfile.exists) Screen.YearList else Screen.ProfileSetup
                                     }
+                                )
+
+                                Screen.ProfileSetup -> ProfileSetupScreen(
+                                    isFa = lang == Lang.FA,
+                                    onSave = { username, avatarId ->
+                                        scope.launch {
+                                            val fresh = dataStore.getProfile()
+                                            val now = currentTimeMillis()
+                                            val newProfile = UserProfile(
+                                                username = username,
+                                                avatarId = avatarId,
+                                                createdAt = if (fresh.createdAt > 0) fresh.createdAt else now,
+                                                lastLoginAt = now,
+                                                totalSessions = fresh.totalSessions + 1
+                                            )
+                                            dataStore.updateProfile(newProfile)
+                                            userProfile = newProfile
+                                            screen = Screen.YearList
+                                        }
+                                    }
+                                )
+
+                                Screen.Profile -> ProfileScreen(
+                                    dataStore = dataStore,
+                                    onBack = { screen = Screen.YearList }
                                 )
                                 Screen.YearList -> YearListScreen(
                                     dataStore = dataStore,
                                     currentLang = lang,
                                     onLanguageChange = { newLang -> lang = newLang },
                                     onTintChange = { tint = it },
-                                    onYearClick = { yearId -> screen = Screen.Chapters(yearId) }
+                                    onYearClick = { yearId -> screen = Screen.Chapters(yearId) },
+                                    onProfileClick = { screen = Screen.Profile },
                                 )
                                 is Screen.Chapters -> ChaptersScreen(
                                     yearId = s.yearId,

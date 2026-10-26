@@ -1,21 +1,27 @@
 ﻿package ir.numdoz.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -28,53 +34,89 @@ fun LevelBadge(
     number: Int,
     state: LevelBadgeState,
     accent: Color,
+    shape: LogoShape,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    logoName: String? = null,
+    stars: Int = 0
 ) {
-    val bgAlpha = when (state) {
-        LevelBadgeState.COMPLETED -> 0.20f
-        LevelBadgeState.AVAILABLE -> 0.08f
-        LevelBadgeState.LOCKED    -> 0.04f
+    val fillAlpha = when (state) {
+        LevelBadgeState.COMPLETED -> 0.30f
+        LevelBadgeState.AVAILABLE -> 0.14f
+        LevelBadgeState.LOCKED -> 0.05f
     }
-    val borderAlpha = when (state) {
-        LevelBadgeState.COMPLETED -> 0.75f
-        LevelBadgeState.AVAILABLE -> 0.50f
-        LevelBadgeState.LOCKED    -> 0.15f
+    val strokeAlpha = when (state) {
+        LevelBadgeState.COMPLETED -> 0.90f
+        LevelBadgeState.AVAILABLE -> 0.65f
+        LevelBadgeState.LOCKED -> 0.18f
     }
     val fg = when (state) {
         LevelBadgeState.COMPLETED -> accent
-        LevelBadgeState.AVAILABLE -> accent.copy(alpha = 0.92f)
-        LevelBadgeState.LOCKED    -> TextMuted
+        LevelBadgeState.AVAILABLE -> accent
+        LevelBadgeState.LOCKED -> TextMuted
     }
 
-    Box(
-        modifier = modifier
-            .size(56.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(accent.copy(alpha = bgAlpha))
-            .border(1.dp, accent.copy(alpha = borderAlpha), RoundedCornerShape(12.dp))
-            .clickable(enabled = state != LevelBadgeState.LOCKED, onClick = onClick),
-        contentAlignment = Alignment.Center
+    Column(
+        modifier = modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        when (state) {
-            LevelBadgeState.LOCKED -> Icon(
-                imageVector = Icons.Default.Lock,
-                contentDescription = null,
-                tint = fg,
-                modifier = Modifier.size(18.dp)
-            )
-            LevelBadgeState.COMPLETED -> Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = null,
-                tint = fg,
-                modifier = Modifier.size(24.dp)
-            )
-            LevelBadgeState.AVAILABLE -> Text(
-                text = "$number",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = fg
-            )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clickable(enabled = state != LevelBadgeState.LOCKED, onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val s = this.size.minDimension
+                val c = Offset(this.size.width / 2f, this.size.height / 2f)
+                val r = s * 0.42f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(accent.copy(alpha = fillAlpha * 0.5f), Color.Transparent),
+                        center = c, radius = r * 1.5f
+                    ),
+                    radius = r * 1.5f, center = c
+                )
+                drawShapeFilled(
+                    shape = shape, center = c, radius = r, color = accent,
+                    fillAlpha = fillAlpha, strokeAlpha = strokeAlpha,
+                    strokeWidth = (r * 0.10f).coerceAtLeast(1f)
+                )
+            }
+            when (state) {
+                LevelBadgeState.LOCKED -> Icon(Icons.Filled.Lock, null, tint = fg, modifier = Modifier.size(14.dp))
+                LevelBadgeState.COMPLETED -> Icon(Icons.Filled.Check, null, tint = fg, modifier = Modifier.size(20.dp))
+                LevelBadgeState.AVAILABLE -> Text("$number", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = fg)
+            }
+            if (logoName != null) {
+                Box(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(9.dp)) {
+                    Icon(iconForMonthLogo(logoName), null, tint = fg.copy(alpha = 0.6f), modifier = Modifier.fillMaxSize())
+                }
+            }
+        }
+
+        // ★ 3 stars: filled = earned, faded = lost (or pending)
+        Row(
+            modifier = Modifier.padding(bottom = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            repeat(3) { i ->
+                val earned = i < stars
+                val showDim = state == LevelBadgeState.COMPLETED
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = null,
+                    tint = when {
+                        earned -> accent
+                        showDim -> accent.copy(alpha = 0.15f)
+                        else -> accent.copy(alpha = 0.12f)
+                    },
+                    modifier = Modifier.size(6.dp)
+                )
+            }
         }
     }
 }

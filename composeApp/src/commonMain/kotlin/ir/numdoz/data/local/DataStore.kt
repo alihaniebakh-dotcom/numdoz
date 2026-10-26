@@ -6,6 +6,8 @@ import ir.numdoz.data.model.Level
 import ir.numdoz.data.model.LevelProgress
 import ir.numdoz.data.model.Section
 import ir.numdoz.data.model.SectionStats
+import ir.numdoz.data.model.UserProfile
+import ir.numdoz.data.model.UserStats
 import ir.numdoz.data.model.UserSettings
 import ir.numdoz.data.model.UserWallet
 import ir.numdoz.data.model.Year
@@ -33,6 +35,10 @@ interface DataStore {
 
     suspend fun getSettings(): UserSettings
     suspend fun updateSettings(settings: UserSettings)
+
+    suspend fun getProfile(): UserProfile
+    suspend fun updateProfile(profile: UserProfile)
+    suspend fun getUserStats(): UserStats
 
     suspend fun isIntroSeen(key: String): Boolean
     suspend fun markIntroSeen(key: String)

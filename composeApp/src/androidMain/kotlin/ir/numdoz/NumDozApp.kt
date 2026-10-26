@@ -20,5 +20,6 @@ class NumDozApp : Application() {
 
     companion object {
         const val REWARDED_ZONE_ID = "6adcfe0ea43f8d7d0179b662"
+        const val INTERSTITIAL_ZONE_ID = ""
     }
 }

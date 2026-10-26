@@ -1,7 +1,6 @@
-﻿package ir.numdoz.ui.screens
+package ir.numdoz.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -32,6 +32,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,14 +44,17 @@ import ir.numdoz.audio.Sfx
 import ir.numdoz.data.local.DataStore
 import ir.numdoz.data.model.Chapter
 import ir.numdoz.data.model.ChapterStats
+import ir.numdoz.data.model.StoryChapter
 import ir.numdoz.data.model.Year
+import ir.numdoz.data.seed.StorySeed
 import ir.numdoz.i18n.Lang
 import ir.numdoz.i18n.LocalLang
-import ir.numdoz.i18n.LocalStrings
 import ir.numdoz.i18n.displayDescription
 import ir.numdoz.i18n.displayTitle
+import ir.numdoz.i18n.toFaNum
 import ir.numdoz.ui.components.ChapterRow
-import ir.numdoz.ui.components.LogoCircle
+import ir.numdoz.ui.components.ShapeLogo
+import ir.numdoz.ui.components.shapeForYear
 import ir.numdoz.ui.theme.LocalAccent
 import ir.numdoz.ui.theme.TextMuted
 import ir.numdoz.ui.theme.TextPrimary
@@ -66,24 +72,32 @@ fun ChaptersScreen(
     val audio = LocalAudio.current
     val accent = LocalAccent.current
     val lang = LocalLang.current
-    val strings = LocalStrings.current
     val scope = rememberCoroutineScope()
 
     var year by remember { mutableStateOf<Year?>(null) }
     var chaptersWithStats by remember { mutableStateOf<List<Pair<Chapter, ChapterStats>>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var pendingChapter by remember { mutableStateOf<Chapter?>(null) }
+    var pendingStory by remember { mutableStateOf<StoryChapter?>(null) }
+    var refreshKey by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(yearId) {
+    LaunchedEffect(yearId, refreshKey) {
         try {
             year = dataStore.getAllYears().find { it.id == yearId }
             year?.accentColorHex?.let { hex -> parseHex(hex)?.let { onTintChange(it) } }
             val chs = dataStore.getChaptersByYear(yearId)
             chaptersWithStats = chs.map { it to dataStore.getStatsForChapter(it.id) }
-            println("[NumDoz/ui] ChaptersScreen: ${chs.size} chapters")
+
+            // Trigger year intro if not read
+            val intro = StorySeed.introFor(yearId)
+            if (intro != null && !dataStore.isIntroSeen(intro.id)) {
+                pendingStory = intro
+            }
         } catch (t: Throwable) {
             println("[NumDoz/ui] ChaptersScreen error: ${t.message}")
-        } finally { loading = false }
+        } finally {
+            loading = false
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -108,47 +122,79 @@ fun ChaptersScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(yColor.copy(alpha = 0.06f))
-                        .border(1.dp, yColor.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                        .drawBehind {
+                            val r = size.height * 0.9f
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(yColor.copy(alpha = 0.12f), Color.Transparent),
+                                    center = Offset(size.width / 2f, size.height / 2f),
+                                    radius = r
+                                ),
+                                radius = r,
+                                center = Offset(size.width / 2f, size.height / 2f)
+                            )
+                        }
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    yColor.copy(alpha = 0.08f),
+                                    Color(0xFF0D0D18).copy(alpha = 0.6f)
+                                )
+                            )
+                        )
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    LogoCircle(logoName = y.logoName, accent = yColor, size = 64.dp)
+                    ShapeLogo(
+                        logoName = y.logoName,
+                        shape = shapeForYear(y.logoName),
+                        accent = yColor,
+                        size = 64.dp
+                    )
                     Spacer(Modifier.height(10.dp))
                     Text(
                         text = y.displayTitle(lang),
                         style = MaterialTheme.typography.headlineMedium,
                         color = TextPrimary,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = y.displayDescription(lang),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        maxLines = 2
                     )
                 }
             }
             Spacer(Modifier.height(22.dp))
 
-            Text(strings.seasonsLabel, style = MaterialTheme.typography.labelLarge, color = TextMuted)
+            Text(
+                text = if (lang == Lang.FA) "فصل‌ها" else "Seasons",
+                style = MaterialTheme.typography.labelLarge,
+                color = TextMuted
+            )
             Spacer(Modifier.height(10.dp))
 
             when {
                 loading -> Box(
                     modifier = Modifier.fillMaxWidth().height(180.dp),
                     contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator(color = accent, strokeWidth = 2.dp) }
-
+                ) {
+                    CircularProgressIndicator(color = accent, strokeWidth = 2.dp)
+                }
                 else -> Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    chaptersWithStats.forEachIndexed { idx, (ch, stats) ->
+                    chaptersWithStats.forEachIndexed { idx, pair ->
+                        val ch = pair.first
+                        val stats = pair.second
                         val unlocked = idx == 0 ||
                             chaptersWithStats.getOrNull(idx - 1)?.let {
                                 it.second.completedLevels >= it.second.totalLevels && it.second.totalLevels > 0
@@ -156,7 +202,10 @@ fun ChaptersScreen(
                         val chColor = parseHex(ch.accentColorHex) ?: accent
                         ChapterRow(
                             title = ch.displayTitle(lang),
-                            subtitle = strings.progressLevels(stats.completedLevels, stats.totalLevels),
+                            subtitle = if (lang == Lang.FA)
+                                "${toFaNum(stats.completedLevels)} از ${toFaNum(stats.totalLevels)} مرحله"
+                            else
+                                "${stats.completedLevels} of ${stats.totalLevels} levels",
                             accent = chColor,
                             logoName = ch.logoName,
                             locked = !unlocked,
@@ -184,7 +233,7 @@ fun ChaptersScreen(
                 title = ch.displayTitle(lang),
                 subtitle = if (lang == Lang.FA) ch.titleEn else ch.titleFa,
                 description = ch.displayDescription(lang),
-                buttonLabel = strings.enterSeason,
+                buttonLabel = if (lang == Lang.FA) "ورود به فصل" else "Enter season",
                 onDismiss = {
                     val id = ch.id
                     pendingChapter = null
@@ -195,10 +244,25 @@ fun ChaptersScreen(
                 }
             )
         }
+
+        pendingStory?.let { story ->
+            StoryReaderScreen(
+                story = story,
+                onDone = {
+                    scope.launch {
+                        dataStore.markIntroSeen(story.id)
+                        pendingStory = null
+                        refreshKey++
+                    }
+                }
+            )
+        }
     }
 }
 
 private fun parseHex(hex: String): Color? = try {
     val h = hex.removePrefix("#")
     if (h.length == 6) Color(0xFF000000 or h.toLong(16)) else null
-} catch (_: Throwable) { null }
+} catch (_: Throwable) {
+    null
+}

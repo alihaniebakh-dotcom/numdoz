@@ -1,20 +1,18 @@
 ﻿package ir.numdoz.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,9 +29,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ir.numdoz.audio.LocalAudio
 import ir.numdoz.audio.Sfx
@@ -46,8 +48,11 @@ import ir.numdoz.i18n.displayDescription
 import ir.numdoz.i18n.displayTitle
 import ir.numdoz.ui.components.LevelBadge
 import ir.numdoz.ui.components.LevelBadgeState
-import ir.numdoz.ui.components.LogoCircle
+import ir.numdoz.ui.components.LogoShape
+import ir.numdoz.ui.components.ShapeLogo
+import ir.numdoz.ui.components.shapeForMonth
 import ir.numdoz.ui.theme.LocalAccent
+import ir.numdoz.ui.theme.TextPrimary
 import ir.numdoz.ui.theme.TextSecondary
 
 @Composable
@@ -78,7 +83,6 @@ fun MonthDaysScreen(
             val prog = mutableMapOf<String, LevelProgress>()
             for (l in lv) dataStore.getLevelProgress(l.id)?.let { prog[l.id] = it }
             progress = prog
-            println("[NumDoz/ui] MonthDays: ${lv.size} levels")
         } catch (t: Throwable) {
             println("[NumDoz/ui] MonthDays error: ${t.message}")
         } finally { loading = false }
@@ -88,48 +92,60 @@ fun MonthDaysScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .widthIn(max = 460.dp)
+                .widthIn(max = 520.dp)
                 .align(Alignment.TopCenter)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 10.dp)
         ) {
-            Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { audio.playSfx(Sfx.CLICK); onBack() }) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = TextSecondary)
                 }
                 Spacer(Modifier.weight(1f))
             }
-            Spacer(Modifier.height(4.dp))
 
             section?.let { s ->
                 val mColor = parseHex(s.accentColorHex) ?: accent
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(20.dp))
-                        .background(mColor.copy(alpha = 0.06f))
-                        .border(1.dp, mColor.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
-                        .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    mColor.copy(alpha = 0.10f),
+                                    Color(0xFF0D0D18).copy(alpha = 0.5f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    LogoCircle(logoName = s.logoName, accent = mColor, size = 64.dp)
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = s.displayTitle(lang),
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = ir.numdoz.ui.theme.TextPrimary,
-                        fontWeight = FontWeight.Medium
+                    ShapeLogo(
+                        logoName = s.logoName,
+                        shape = shapeForMonth(s.logoName),
+                        accent = mColor,
+                        size = 52.dp
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = s.displayDescription(lang),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
-                        textAlign = TextAlign.Center
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = s.displayTitle(lang),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = s.displayDescription(lang),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
-            Spacer(Modifier.height(20.dp))
+
+            Spacer(Modifier.height(10.dp))
 
             when {
                 loading -> Box(
@@ -137,45 +153,60 @@ fun MonthDaysScreen(
                     contentAlignment = Alignment.Center
                 ) { CircularProgressIndicator(color = accent, strokeWidth = 2.dp) }
                 else -> {
-                    val mColor = section?.accentColorHex?.let { parseHex(it) } ?: accent
+                    val monthColor = section?.accentColorHex?.let { parseHex(it) } ?: accent
+                    val monthShape: LogoShape = section?.logoName?.let { shapeForMonth(it) } ?: LogoShape.CIRCLE
+                    val monthLogo = section?.logoName
+
+                    // ★ 5 rows × 6 cols filling the remaining space
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .weight(1f)
                     ) {
-                        var idx = 0
-                        while (idx < levels.size) {
-                            val rowEnd = minOf(idx + 4, levels.size)
+                        for (row in 0 until 5) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                for (j in idx until rowEnd) {
-                                    val lv = levels[j]
-                                    val p = progress[lv.id]
-                                    val unlocked = j == 0 ||
-                                        progress[levels[j - 1].id]?.completed == true
-                                    val state = when {
-                                        p?.completed == true -> LevelBadgeState.COMPLETED
-                                        unlocked -> LevelBadgeState.AVAILABLE
-                                        else -> LevelBadgeState.LOCKED
-                                    }
-                                    LevelBadge(
-                                        number = j + 1,
-                                        state = state,
-                                        accent = mColor,
-                                        onClick = {
-                                            audio.playSfx(Sfx.CLICK)
-                                            onLevelClick(lv.id)
+                                for (col in 0 until 6) {
+                                    val index = row * 6 + col
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                            .padding(2.dp)
+                                    ) {
+                                        if (index < levels.size) {
+                                            val lv = levels[index]
+                                            val p = progress[lv.id]
+                                            val unlocked = index == 0 ||
+                                                progress[levels[index - 1].id]?.completed == true
+                                            val state = when {
+                                                p?.completed == true -> LevelBadgeState.COMPLETED
+                                                unlocked -> LevelBadgeState.AVAILABLE
+                                                else -> LevelBadgeState.LOCKED
+                                            }
+                                            LevelBadge(
+                                                number = index + 1,
+                                                state = state,
+                                                accent = monthColor,
+                                                shape = monthShape,
+                                                logoName = monthLogo,
+                                                stars = p?.stars ?: 0,
+                                                onClick = {
+                                                    audio.playSfx(Sfx.CLICK)
+                                                    onLevelClick(lv.id)
+                                                }
+                                            )
                                         }
-                                    )
+                                    }
                                 }
                             }
-                            idx = rowEnd
                         }
-                        Spacer(Modifier.height(60.dp))
                     }
+                    Spacer(Modifier.height(8.dp))
                 }
             }
         }

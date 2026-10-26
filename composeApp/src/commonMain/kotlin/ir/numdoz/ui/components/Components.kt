@@ -1,13 +1,6 @@
 ﻿package ir.numdoz.ui.components
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,16 +19,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ir.numdoz.ui.theme.BorderHair
-import ir.numdoz.ui.theme.NeonCyan
 import ir.numdoz.ui.theme.SurfaceMin
 import ir.numdoz.ui.theme.TextMuted
 import ir.numdoz.ui.theme.TextPrimary
@@ -50,106 +42,66 @@ fun ChapterRow(
     locked: Boolean = false,
     onClick: () -> Unit = {}
 ) {
+    val shape = shapeForChapter(logoName)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(SurfaceMin)
-            .border(1.dp, BorderHair, RoundedCornerShape(14.dp))
+            .drawBehind {
+                if (!locked) {
+                    val r = size.height * 0.9f
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(accent.copy(alpha = 0.10f), Color.Transparent),
+                            center = Offset(size.width * 0.15f, size.height / 2f),
+                            radius = r
+                        ),
+                        radius = r, center = Offset(size.width * 0.15f, size.height / 2f)
+                    )
+                }
+            }
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        accent.copy(alpha = if (locked) 0.04f else 0.10f),
+                        SurfaceMin.copy(alpha = 0.55f),
+                        SurfaceMin.copy(alpha = 0.35f)
+                    )
+                )
+            )
             .clickable(enabled = !locked, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        LogoCircle(logoName = logoName, accent = accent, size = 44.dp, dim = locked)
+        ShapeLogo(
+            logoName = logoName,
+            shape = shape,
+            accent = accent,
+            size = 44.dp,
+            dim = locked
+        )
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (locked) TextMuted else TextPrimary
+                color = if (locked) TextMuted else TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted
+                color = TextMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
         if (locked) {
-            Icon(
-                imageVector = Icons.Filled.Lock,
-                contentDescription = null,
-                tint = TextMuted,
-                modifier = Modifier.size(20.dp)
-            )
+            Icon(Icons.Filled.Lock, null, tint = TextMuted, modifier = Modifier.size(20.dp))
         } else {
-            Icon(
-                imageVector = Icons.Filled.ChevronRight,
-                contentDescription = null,
-                tint = TextMuted,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun GlowButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    glowColor: Color = NeonCyan
-) {
-    val transition = rememberInfiniteTransition(label = "btnGlow")
-    val pulse by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.7f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "btnPulse"
-    )
-
-    Box(
-        modifier = modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(100.dp)
-                .drawBehind {
-                    val r = size.width * 0.55f
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                glowColor.copy(alpha = pulse * 0.35f),
-                                Color.Transparent
-                            ),
-                            center = center,
-                            radius = r
-                        ),
-                        radius = r,
-                        center = center
-                    )
-                }
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(SurfaceMin.copy(alpha = 0.95f))
-                .border(1.dp, glowColor.copy(alpha = 0.55f), RoundedCornerShape(28.dp))
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                color = TextPrimary,
-                style = MaterialTheme.typography.titleMedium
-            )
+            Icon(Icons.Filled.ChevronRight, null, tint = TextMuted, modifier = Modifier.size(20.dp))
         }
     }
 }

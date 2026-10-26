@@ -1,4 +1,4 @@
-﻿package ir.numdoz.ui.screens
+package ir.numdoz.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -6,8 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,15 +20,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.VolumeOff
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
-import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShoppingCart
@@ -42,7 +41,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,9 +48,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -61,19 +61,31 @@ import ir.numdoz.ads.LocalAdManager
 import ir.numdoz.audio.LocalAudio
 import ir.numdoz.audio.Sfx
 import ir.numdoz.data.local.DataStore
-import ir.numdoz.data.model.UserSettings
+import ir.numdoz.data.model.UserProfile
 import ir.numdoz.data.model.UserWallet
 import ir.numdoz.data.model.Year
+import ir.numdoz.economy.Economy
 import ir.numdoz.i18n.Lang
 import ir.numdoz.i18n.LocalLang
 import ir.numdoz.i18n.LocalStrings
 import ir.numdoz.i18n.displayTitle
+import ir.numdoz.i18n.toFaNum
+import ir.numdoz.profile.FaceAvatar
+import ir.numdoz.profile.avatarById
 import ir.numdoz.ui.components.AnimatedLogo
+import ir.numdoz.ui.components.CoinIcon
+import ir.numdoz.ui.components.DailyIcon
+import ir.numdoz.ui.components.HintIcon
+import ir.numdoz.ui.components.TimeBoostIcon
 import ir.numdoz.ui.components.YearCard
 import ir.numdoz.ui.theme.LocalAccent
+import ir.numdoz.ui.theme.LocalAccentAlt
+import ir.numdoz.ui.theme.LocalAccentTertiary
 import ir.numdoz.ui.theme.TextMuted
 import ir.numdoz.ui.theme.TextPrimary
 import ir.numdoz.ui.theme.TextSecondary
+import ir.numdoz.util.currentTimeMillis
+import ir.numdoz.util.isSameLocalDay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -83,11 +95,15 @@ fun YearListScreen(
     currentLang: Lang,
     onLanguageChange: (Lang) -> Unit,
     onTintChange: (Color?) -> Unit,
-    onYearClick: (String) -> Unit
+    onYearClick: (String) -> Unit,
+    onProfileClick: () -> Unit
 ) {
     val audio = LocalAudio.current
     val adManager = LocalAdManager.current
-    val accent = LocalAccent.current
+    val hintColor = LocalAccent.current
+    val capsuleColor = LocalAccentAlt.current
+    val giftColor = LocalAccentTertiary.current
+    val coinColor = Color(0xFFFFC947)
     val strings = LocalStrings.current
     val lang = LocalLang.current
     val scope = rememberCoroutineScope()
@@ -95,15 +111,19 @@ fun YearListScreen(
     var ready by remember { mutableStateOf(false) }
     var years by remember { mutableStateOf<List<Year>>(emptyList()) }
     var wallet by remember { mutableStateOf(UserWallet()) }
+    var profile by remember { mutableStateOf(UserProfile()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var pendingYear by remember { mutableStateOf<Year?>(null) }
 
     var showHintModal by remember { mutableStateOf(false) }
     var showSettingsModal by remember { mutableStateOf(false) }
+    var showTimeCapsuleModal by remember { mutableStateOf(false) }
+    var showDailyModal by remember { mutableStateOf(false) }
+    var showCoinModal by remember { mutableStateOf(false) }
     var adLoading by remember { mutableStateOf(false) }
     var adError by remember { mutableStateOf<String?>(null) }
-    
+    var adMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         onTintChange(null)
@@ -114,17 +134,89 @@ fun YearListScreen(
             dataStore.seedIfEmpty()
             years = dataStore.getAllYears()
             wallet = dataStore.getWallet()
-            println("[NumDoz/ui] YearList loaded ${years.size} years, hints=${wallet.freeHints}")
+            profile = dataStore.getProfile()
         } catch (t: Throwable) {
-            println("[NumDoz/ui] YearList error: ${t.message}")
             error = t.message ?: t.javaClass.simpleName
-        } finally { loading = false }
+        } finally {
+            loading = false
+        }
     }
 
-    
+    fun watchAdFor(kind: String) {
+        adLoading = true
+        adError = null
+        adManager.showRewarded(
+            onRewarded = {
+                wallet = when (kind) {
+                    "coins" -> wallet.copy(
+                        coins = wallet.coins + Economy.COINS_PER_AD,
+                        totalAdsWatched = wallet.totalAdsWatched + 1
+                    )
+                    "hint" -> wallet.copy(
+                        freeHints = wallet.freeHints + 1,
+                        totalAdsWatched = wallet.totalAdsWatched + 1
+                    )
+                    "capsule" -> wallet.copy(
+                        freeTimeBoosts = wallet.freeTimeBoosts + 1,
+                        totalAdsWatched = wallet.totalAdsWatched + 1
+                    )
+                    "daily" -> wallet.copy(
+                        coins = wallet.coins + Economy.COINS_PER_DAILY,
+                        totalAdsWatched = wallet.totalAdsWatched + 1,
+                        lastDailyRewardClaimMs = currentTimeMillis()
+                    )
+                    else -> wallet
+                }
+                scope.launch { dataStore.updateWallet(wallet) }
+                adMessage = when (kind) {
+                    "coins" -> strings.coinsEarned(Economy.COINS_PER_AD)
+                    "hint" -> if (lang == Lang.FA) "+۱ راهنما" else "+1 hint"
+                    "capsule" -> if (lang == Lang.FA) "+۱ کپسول" else "+1 capsule"
+                    "daily" -> strings.coinsEarned(Economy.COINS_PER_DAILY)
+                    else -> null
+                }
+            },
+            onClosed = { adLoading = false },
+            onFailed = { msg ->
+                adLoading = false
+                adError = msg
+            }
+        )
+    }
+
+    fun buyHint() {
+        if (wallet.coins < Economy.HINT_PRICE) {
+            adError = strings.notEnoughCoins
+            return
+        }
+        wallet = wallet.copy(
+            coins = wallet.coins - Economy.HINT_PRICE,
+            freeHints = wallet.freeHints + 1
+        )
+        scope.launch { dataStore.updateWallet(wallet) }
+        audio.playSfx(Sfx.CORRECT)
+        showHintModal = false
+    }
+
+    fun buyCapsule() {
+        if (wallet.coins < Economy.TIME_BOOST_PRICE) {
+            adError = strings.notEnoughCoins
+            return
+        }
+        wallet = wallet.copy(
+            coins = wallet.coins - Economy.TIME_BOOST_PRICE,
+            freeTimeBoosts = wallet.freeTimeBoosts + 1
+        )
+        scope.launch { dataStore.updateWallet(wallet) }
+        audio.playSfx(Sfx.CORRECT)
+        showTimeCapsuleModal = false
+    }
+
+    val canClaimDaily = !isSameLocalDay(wallet.lastDailyRewardClaimMs, currentTimeMillis())
 
     Box(modifier = Modifier.fillMaxSize()) {
 
+        // ────── MAIN CONTENT ──────
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -138,11 +230,10 @@ fun YearListScreen(
 
             AnimatedVisibility(
                 visible = ready,
-                enter = fadeIn(tween(800)) +
-                        slideInVertically(
-                            initialOffsetY = { -30 },
-                            animationSpec = tween(900)
-                        )
+                enter = fadeIn(tween(800)) + slideInVertically(
+                    initialOffsetY = { -30 },
+                    animationSpec = tween(900)
+                )
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     AnimatedLogo(size = 110.dp)
@@ -157,16 +248,21 @@ fun YearListScreen(
                     Text(
                         text = strings.tagline,
                         style = MaterialTheme.typography.titleLarge,
-                        color = TextSecondary
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
             Spacer(Modifier.height(14.dp))
 
-            AnimatedVisibility(visible = ready, enter = fadeIn(tween(600, delayMillis = 420))) {
+            AnimatedVisibility(
+                visible = ready,
+                enter = fadeIn(tween(600, delayMillis = 420))
+            ) {
                 Box(
-                    modifier = Modifier
+                    Modifier
                         .widthIn(max = 44.dp)
                         .height(1.dp)
                         .background(Color(0x33FFFFFF))
@@ -175,7 +271,10 @@ fun YearListScreen(
 
             Spacer(Modifier.height(36.dp))
 
-            AnimatedVisibility(visible = ready, enter = fadeIn(tween(500, delayMillis = 500))) {
+            AnimatedVisibility(
+                visible = ready,
+                enter = fadeIn(tween(500, delayMillis = 500))
+            ) {
                 Text(
                     text = strings.yearsLabel,
                     style = MaterialTheme.typography.labelLarge,
@@ -183,32 +282,31 @@ fun YearListScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+
             Spacer(Modifier.height(12.dp))
 
             when {
                 loading -> Box(
-                    modifier = Modifier.fillMaxWidth().height(200.dp),
+                    Modifier.fillMaxWidth().height(200.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = accent, strokeWidth = 2.dp)
+                    CircularProgressIndicator(color = hintColor, strokeWidth = 2.dp)
                 }
-
                 error != null -> Text(
                     text = "Error: $error",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xFFF87171),
                     textAlign = TextAlign.Center
                 )
-
                 else -> Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     years.forEachIndexed { idx, y ->
-                        val yColor = parseHex(y.accentColorHex) ?: accent
+                        val yColor = parseHex(y.accentColorHex) ?: hintColor
                         AnimatedVisibility(
                             visible = ready,
-                            enter = fadeIn(tween(600, delayMillis = (600 + idx * 150))) +
+                            enter = fadeIn(tween(600, delayMillis = 600 + idx * 150)) +
                                     slideInVertically(
                                         initialOffsetY = { 24 },
                                         animationSpec = tween(600, delayMillis = 600 + idx * 150)
@@ -240,126 +338,311 @@ fun YearListScreen(
             Spacer(Modifier.height(48.dp))
         }
 
+        // ────── TOP BAR ──────
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .zIndex(10f)
-                .padding(top = 10.dp, end = 10.dp),
+                .padding(top = 8.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            HomeHintChip(
+            // User avatar
+            val avSpec = avatarById(profile.avatarId)
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .padding(4.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                avSpec.color.copy(alpha = 0.35f),
+                                avSpec.color.copy(alpha = 0.12f)
+                            )
+                        )
+                    )
+                    .clickable {
+                        audio.playSfx(Sfx.CLICK)
+                        onProfileClick()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(Modifier.size(30.dp)) {
+                    FaceAvatar(spec = avSpec, modifier = Modifier.fillMaxSize())
+                }
+            }
+            Spacer(Modifier.size(2.dp))
+
+            // Coin chip
+            CoinChip(
+                count = wallet.coins,
+                color = coinColor,
+                onClick = {
+                    audio.playSfx(Sfx.CLICK)
+                    showHintModal = false
+                    showTimeCapsuleModal = false
+                    showSettingsModal = false
+                    showDailyModal = false
+                    showCoinModal = true
+                }
+            )
+
+            // Daily gift (only if claimable)
+            if (canClaimDaily) {
+                StatusIconButton(
+                    count = 0,
+                    tint = giftColor,
+                    animate = true,
+                    onClick = {
+                        audio.playSfx(Sfx.CLICK)
+                        showHintModal = false
+                        showTimeCapsuleModal = false
+                        showSettingsModal = false
+                        showCoinModal = false
+                        showDailyModal = true
+                    }
+                ) { s ->
+                    Box(Modifier.size(s)) {
+                        DailyIcon(
+                            modifier = Modifier.fillMaxSize(),
+                            tint = giftColor,
+                            animate = true
+                        )
+                    }
+                }
+            }
+
+            // Time capsule
+            StatusIconButton(
+                count = wallet.freeTimeBoosts,
+                tint = capsuleColor,
+                animate = wallet.freeTimeBoosts > 0,
+                onClick = {
+                    audio.playSfx(Sfx.CLICK)
+                    showHintModal = false
+                    showSettingsModal = false
+                    showDailyModal = false
+                    showCoinModal = false
+                    showTimeCapsuleModal = true
+                }
+            ) { s ->
+                Box(Modifier.size(s)) {
+                    TimeBoostIcon(
+                        modifier = Modifier.fillMaxSize(),
+                        tint = capsuleColor,
+                        animate = wallet.freeTimeBoosts > 0
+                    )
+                }
+            }
+
+            // Hint
+            StatusIconButton(
                 count = wallet.freeHints,
-                accent = accent,
+                tint = hintColor,
+                animate = false,
                 onClick = {
                     audio.playSfx(Sfx.CLICK)
                     showSettingsModal = false
+                    showTimeCapsuleModal = false
+                    showDailyModal = false
+                    showCoinModal = false
                     showHintModal = true
                 }
-            )
-            Spacer(Modifier.size(2.dp))
+            ) { s ->
+                Box(Modifier.size(s)) {
+                    HintIcon(
+                        modifier = Modifier.fillMaxSize(),
+                        tint = hintColor,
+                        animate = true
+                    )
+                }
+            }
+
             IconButton(onClick = {
                 audio.playSfx(Sfx.CLICK)
                 showHintModal = false
+                showTimeCapsuleModal = false
+                showDailyModal = false
+                showCoinModal = false
                 showSettingsModal = true
             }) {
-                Icon(Icons.Outlined.Settings, "Settings", tint = TextSecondary)
+                Icon(Icons.Outlined.Settings, null, tint = TextSecondary)
             }
+
             IconButton(onClick = {
                 audio.playSfx(Sfx.CLICK)
                 audio.toggleMute()
             }) {
                 Icon(
-                    imageVector = if (audio.isMuted) Icons.AutoMirrored.Outlined.VolumeOff
-                                  else Icons.AutoMirrored.Outlined.VolumeUp,
-                    contentDescription = if (audio.isMuted) "Unmute" else "Mute",
+                    imageVector = if (audio.isMuted)
+                        Icons.AutoMirrored.Outlined.VolumeOff
+                    else
+                        Icons.AutoMirrored.Outlined.VolumeUp,
+                    contentDescription = null,
                     tint = if (audio.isMuted) TextMuted else TextSecondary
                 )
             }
         }
 
+        // ────── MODALS ──────
+
+        if (showCoinModal) {
+            CoinModal(
+                coins = wallet.coins,
+                accent = coinColor,
+                onWatchAd = { showCoinModal = false; watchAdFor("coins") },
+                onClose = { audio.playSfx(Sfx.CLICK); showCoinModal = false }
+            )
+        }
+
         if (showHintModal) {
-            HomeHintModal(
-                wallet = wallet,
-                accent = accent,
-                onWatchAd = {
-                    showHintModal = false
-                    adLoading = true
-                    adError = null
-                    adManager.showRewarded(
-                        onRewarded = {
-                            wallet = wallet.copy(
-                                freeHints = wallet.freeHints + 1,
-                                totalAdsWatched = wallet.totalAdsWatched + 1
-                            )
-                            scope.launch { dataStore.updateWallet(wallet) }
-                        },
-                        onClosed = { adLoading = false },
-                        onFailed = { msg -> adLoading = false; adError = msg }
-                    )
-                },
-                onBuy = {},
-                onClose = {
-                    audio.playSfx(Sfx.CLICK)
-                    showHintModal = false
-                }
+            HintPurchaseModal(
+                hints = wallet.freeHints,
+                coins = wallet.coins,
+                accent = hintColor,
+                onBuy = { buyHint() },
+                onWatchAd = { showHintModal = false; watchAdFor("hint") },
+                onGetCoins = { showHintModal = false; showCoinModal = true },
+                onClose = { audio.playSfx(Sfx.CLICK); showHintModal = false }
+            )
+        }
+
+        if (showTimeCapsuleModal) {
+            CapsulePurchaseModal(
+                capsules = wallet.freeTimeBoosts,
+                coins = wallet.coins,
+                accent = capsuleColor,
+                onBuy = { buyCapsule() },
+                onWatchAd = { showTimeCapsuleModal = false; watchAdFor("capsule") },
+                onGetCoins = { showTimeCapsuleModal = false; showCoinModal = true },
+                onClose = { audio.playSfx(Sfx.CLICK); showTimeCapsuleModal = false }
+            )
+        }
+
+        if (showDailyModal) {
+            DailyRewardModal(
+                accent = giftColor,
+                coinColor = coinColor,
+                onClaim = { showDailyModal = false; watchAdFor("daily") },
+                onClose = { audio.playSfx(Sfx.CLICK); showDailyModal = false }
             )
         }
 
         if (showSettingsModal) {
             HomeSettingsModal(
                 currentLang = currentLang,
-                accent = accent,
+                accent = hintColor,
                 isMuted = audio.isMuted,
                 onToggleSound = { audio.toggleMute() },
                 onToggleLanguage = {
                     val newLang = if (currentLang == Lang.FA) Lang.EN else Lang.FA
                     onLanguageChange(newLang)
                     scope.launch {
-                        val current = dataStore.getSettings()
-                        dataStore.updateSettings(current.copy(
-                            language = if (newLang == Lang.FA) "fa" else "en"
-                        ))
+                        val cur = dataStore.getSettings()
+                        dataStore.updateSettings(cur.copy(language = if (newLang == Lang.FA) "fa" else "en"))
                     }
                 },
-                onClose = {
-                    audio.playSfx(Sfx.CLICK)
-                    showSettingsModal = false
-                }
+                onClose = { audio.playSfx(Sfx.CLICK); showSettingsModal = false }
             )
         }
 
+        // ────── AD OVERLAYS ──────
+
         if (adLoading) {
-            AdLoadingOverlay(accent = accent)
+            BlockingOverlay {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(color = hintColor, strokeWidth = 3.dp)
+                    Text(
+                        text = if (lang == Lang.FA) "در حال بارگذاری تبلیغ…" else "Loading ad…",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextSecondary
+                    )
+                }
+            }
+        }
+
+        adMessage?.let { msg ->
+            LaunchedEffect(msg) {
+                delay(1800)
+                adMessage = null
+            }
+            BlockingOverlay {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    coinColor.copy(alpha = 0.20f),
+                                    coinColor.copy(alpha = 0.10f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(Modifier.size(28.dp)) {
+                        CoinIcon(
+                            modifier = Modifier.fillMaxSize(),
+                            tint = coinColor,
+                            animate = true
+                        )
+                    }
+                    Text(
+                        text = msg,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = coinColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
 
         adError?.let { err ->
-            AdErrorModal(
-                errorMessage = err,
-                accent = accent,
-                onRetry = { adError = null; adLoading = true; adManager.showRewarded(
-                    onRewarded = {
-                        wallet = wallet.copy(
-                            freeHints = wallet.freeHints + 1,
-                            totalAdsWatched = wallet.totalAdsWatched + 1
-                        )
-                        scope.launch { dataStore.updateWallet(wallet) }
-                    },
-                    onClosed = { adLoading = false },
-                    onFailed = { msg -> adLoading = false; adError = msg }
-                ) },
-                onClose = { adError = null }
-            )
+            BlockingOverlay {
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 340.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Brush.verticalGradient(listOf(Color(0xFF1E1E2E), Color(0xFF14141D))))
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        text = err,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2
+                    )
+                    ModalActionButton(
+                        text = strings.close,
+                        icon = null,
+                        accent = hintColor,
+                        primary = true,
+                        onClick = { adError = null }
+                    )
+                }
+            }
         }
+
+        // ────── INTRO DIALOG ──────
 
         pendingYear?.let { y ->
             IntroDialog(
                 logoName = y.logoName,
-                accent = parseHex(y.accentColorHex) ?: accent,
+                accent = parseHex(y.accentColorHex) ?: hintColor,
                 title = y.displayTitle(lang),
                 subtitle = if (lang == Lang.FA) y.titleEn else y.titleFa,
                 description = if (lang == Lang.FA) y.descriptionFa else y.descriptionEn,
-                buttonLabel = strings.enterYear,
+                buttonLabel = if (lang == Lang.FA) "ورود به سال" else "Enter year",
                 onDismiss = {
                     val id = y.id
                     pendingYear = null
@@ -373,103 +656,581 @@ fun YearListScreen(
     }
 }
 
-@Composable
-private fun HomeHintChip(count: Int, accent: Color, onClick: () -> Unit) {
-    val strings = LocalStrings.current
-    val hasHints = count > 0
-    val fg = if (hasHints) accent else TextMuted
-    val bgAlpha = if (hasHints) 0.15f else 0.06f
-    val borderAlpha = if (hasHints) 0.5f else 0.2f
+// ═══════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════
 
+@Composable
+private fun BlockingOverlay(content: @Composable () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xE808080E))
+            .zIndex(20f)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {}
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun CoinChip(count: Int, color: Color, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(fg.copy(alpha = bgAlpha))
-            .border(1.dp, fg.copy(alpha = borderAlpha), RoundedCornerShape(20.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(color.copy(alpha = 0.16f), color.copy(alpha = 0.06f))
+                )
+            )
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Icon(
-            imageVector = if (hasHints) Icons.Filled.Lightbulb else Icons.Outlined.Lightbulb,
-            contentDescription = null,
-            tint = fg,
-            modifier = Modifier.size(16.dp)
-        )
+        Box(Modifier.size(20.dp)) {
+            CoinIcon(modifier = Modifier.fillMaxSize(), tint = color, animate = true)
+        }
         Text(
-            text = if (hasHints) strings.hintWithCount(count) else strings.noHintsLabel,
+            text = if (count > 999)
+                (if (LocalLang.current == Lang.FA) "۹۹۹+" else "999+")
+            else
+                (if (LocalLang.current == Lang.FA) toFaNum(count) else "$count"),
+            color = color,
             style = MaterialTheme.typography.labelLarge,
-            color = fg,
-            fontWeight = if (hasHints) FontWeight.SemiBold else FontWeight.Normal
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+        Spacer(Modifier.size(2.dp))
+    }
+}
+
+@Composable
+private fun StatusIconButton(
+    count: Int,
+    tint: Color,
+    animate: Boolean,
+    onClick: () -> Unit,
+    content: @Composable (androidx.compose.ui.unit.Dp) -> Unit
+) {
+    Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            content(24.dp)
+        }
+        if (count > 0) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(tint.copy(alpha = 0.95f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (count > 9)
+                        (if (LocalLang.current == Lang.FA) "۹+" else "9+")
+                    else
+                        (if (LocalLang.current == Lang.FA) toFaNum(count) else "$count"),
+                    color = Color(0xFF08080E),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModalScaffold(accent: Color, content: @Composable () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(
+                Brush.radialGradient(
+                    listOf(Color(0xE808080E), Color(0xF408080E))
+                )
+            )
+            .zIndex(15f)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {}
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            Modifier
+                .widthIn(max = 380.dp)
+                .padding(24.dp)
+                .clip(RoundedCornerShape(32.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF1E1E2E), Color(0xFF14141D))
+                    )
+                )
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ModalActionButton(
+    text: String,
+    icon: @Composable (() -> Unit)?,
+    accent: Color,
+    primary: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                if (primary)
+                    Brush.horizontalGradient(
+                        listOf(accent.copy(alpha = 0.88f), accent.copy(alpha = 0.62f))
+                    )
+                else
+                    Brush.horizontalGradient(
+                        listOf(Color(0xFF23232F), Color(0xFF1A1A25))
+                    )
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        if (icon != null) {
+            icon()
+            Spacer(Modifier.size(8.dp))
+        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (primary) Color.White else TextMuted,
+            fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
 
 @Composable
-private fun HomeHintModal(
-    wallet: UserWallet,
+private fun SmallPill(text: String, accent: Color) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(accent.copy(alpha = 0.14f), accent.copy(alpha = 0.06f))
+                )
+            )
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = accent,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun CoinModal(
+    coins: Int,
     accent: Color,
     onWatchAd: () -> Unit,
-    onBuy: () -> Unit,
     onClose: () -> Unit
 ) {
     val strings = LocalStrings.current
-    val hasHints = wallet.freeHints > 0
+    val isFa = LocalLang.current == Lang.FA
     ModalScaffold(accent = accent) {
         Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(accent.copy(alpha = 0.12f))
-                .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(20.dp)),
+            Modifier
+                .size(96.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(
+                    Brush.radialGradient(
+                        listOf(accent.copy(alpha = 0.20f), accent.copy(alpha = 0.06f))
+                    )
+                ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = if (hasHints) Icons.Filled.Lightbulb else Icons.Outlined.Lightbulb,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(36.dp)
+            CoinIcon(modifier = Modifier.size(64.dp), tint = accent, animate = true)
+        }
+        Text(
+            text = strings.coinsLabel,
+            style = MaterialTheme.typography.headlineMedium,
+            color = TextPrimary,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(accent.copy(alpha = 0.14f), accent.copy(alpha = 0.06f))
+                    )
+                )
+                .padding(horizontal = 18.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = strings.coinCount(coins),
+                style = MaterialTheme.typography.titleMedium,
+                color = accent,
+                maxLines = 1
             )
+        }
+        Text(
+            text = if (isFa)
+                "با سکه می‌تونی راهنما و کپسول زمان بخری."
+            else
+                "Use coins to buy hints and time capsules.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            textAlign = TextAlign.Center,
+            maxLines = 2
+        )
+        ModalActionButton(
+            text = strings.watchAdForCoins,
+            icon = {
+                Icon(
+                    Icons.Outlined.Videocam,
+                    null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            accent = accent,
+            primary = true,
+            onClick = onWatchAd
+        )
+        TextButton(onClick = onClose) {
+            Text(strings.close, color = TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun HintPurchaseModal(
+    hints: Int,
+    coins: Int,
+    accent: Color,
+    onBuy: () -> Unit,
+    onWatchAd: () -> Unit,
+    onGetCoins: () -> Unit,
+    onClose: () -> Unit
+) {
+    val strings = LocalStrings.current
+    val isFa = LocalLang.current == Lang.FA
+    val canAfford = coins >= Economy.HINT_PRICE
+    ModalScaffold(accent = accent) {
+        Box(
+            Modifier
+                .size(76.dp)
+                .clip(RoundedCornerShape(26.dp))
+                .background(
+                    Brush.radialGradient(
+                        listOf(accent.copy(alpha = 0.20f), accent.copy(alpha = 0.06f))
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            HintIcon(modifier = Modifier.size(52.dp), tint = accent, animate = true)
         }
         Text(
             text = strings.hintLabel,
             style = MaterialTheme.typography.headlineMedium,
             color = TextPrimary,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
         )
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(14.dp))
-                .background(accent.copy(alpha = 0.10f))
-                .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
-                .padding(horizontal = 18.dp, vertical = 8.dp)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            SmallPill(
+                text = if (isFa) "موجودی: ${toFaNum(hints)}" else "Have: $hints",
+                accent = accent
+            )
+            SmallPill(text = strings.coinCount(coins), accent = Color(0xFFFFC947))
+        }
+        Text(
+            text = if (isFa)
+                "می‌تونی با سکه بخری یا با تماشای تبلیغ رایگان بگیری."
+            else
+                "Buy with coins or watch an ad for free.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            textAlign = TextAlign.Center,
+            maxLines = 2
+        )
+        if (canAfford) {
+            ModalActionButton(
+                text = strings.buyWithCoins(Economy.HINT_PRICE),
+                icon = {
+                    Box(Modifier.size(20.dp)) {
+                        CoinIcon(
+                            modifier = Modifier.fillMaxSize(),
+                            tint = Color.White,
+                            animate = false
+                        )
+                    }
+                },
+                accent = accent,
+                primary = true,
+                onClick = onBuy
+            )
+        } else {
+            ModalActionButton(
+                text = strings.getCoins,
+                icon = {
+                    Box(Modifier.size(20.dp)) {
+                        CoinIcon(
+                            modifier = Modifier.fillMaxSize(),
+                            tint = Color.White,
+                            animate = true
+                        )
+                    }
+                },
+                accent = Color(0xFFFFC947),
+                primary = true,
+                onClick = onGetCoins
+            )
+        }
+        ModalActionButton(
+            text = if (isFa)
+                "تماشای تبلیغ — دریافت ۱ رایگان"
+            else
+                "Watch ad — get 1 free",
+            icon = {
+                Icon(
+                    Icons.Outlined.Videocam,
+                    null,
+                    tint = accent,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            accent = accent,
+            primary = false,
+            onClick = onWatchAd
+        )
+        TextButton(onClick = onClose) {
+            Text(strings.close, color = TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun CapsulePurchaseModal(
+    capsules: Int,
+    coins: Int,
+    accent: Color,
+    onBuy: () -> Unit,
+    onWatchAd: () -> Unit,
+    onGetCoins: () -> Unit,
+    onClose: () -> Unit
+) {
+    val strings = LocalStrings.current
+    val isFa = LocalLang.current == Lang.FA
+    val canAfford = coins >= Economy.TIME_BOOST_PRICE
+    ModalScaffold(accent = accent) {
+        Box(
+            Modifier
+                .size(76.dp)
+                .clip(RoundedCornerShape(26.dp))
+                .background(
+                    Brush.radialGradient(
+                        listOf(accent.copy(alpha = 0.20f), accent.copy(alpha = 0.06f))
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            TimeBoostIcon(modifier = Modifier.size(52.dp), tint = accent, animate = true)
+        }
+        Text(
+            text = strings.timeBoostLabel,
+            style = MaterialTheme.typography.headlineMedium,
+            color = TextPrimary,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SmallPill(
+                text = if (isFa) "موجودی: ${toFaNum(capsules)}" else "Have: $capsules",
+                accent = accent
+            )
+            SmallPill(text = strings.coinCount(coins), accent = Color(0xFFFFC947))
+        }
+        Text(
+            text = if (isFa)
+                "می‌تونی با سکه بخری یا با تماشای تبلیغ رایگان بگیری."
+            else
+                "Buy with coins or watch an ad for free.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            textAlign = TextAlign.Center,
+            maxLines = 2
+        )
+        if (canAfford) {
+            ModalActionButton(
+                text = strings.buyWithCoins(Economy.TIME_BOOST_PRICE),
+                icon = {
+                    Box(Modifier.size(20.dp)) {
+                        CoinIcon(
+                            modifier = Modifier.fillMaxSize(),
+                            tint = Color.White,
+                            animate = false
+                        )
+                    }
+                },
+                accent = accent,
+                primary = true,
+                onClick = onBuy
+            )
+        } else {
+            ModalActionButton(
+                text = strings.getCoins,
+                icon = {
+                    Box(Modifier.size(20.dp)) {
+                        CoinIcon(
+                            modifier = Modifier.fillMaxSize(),
+                            tint = Color.White,
+                            animate = true
+                        )
+                    }
+                },
+                accent = Color(0xFFFFC947),
+                primary = true,
+                onClick = onGetCoins
+            )
+        }
+        ModalActionButton(
+            text = if (isFa)
+                "تماشای تبلیغ — دریافت ۱ رایگان"
+            else
+                "Watch ad — get 1 free",
+            icon = {
+                Icon(
+                    Icons.Outlined.Videocam,
+                    null,
+                    tint = accent,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            accent = accent,
+            primary = false,
+            onClick = onWatchAd
+        )
+        TextButton(onClick = onClose) {
+            Text(strings.close, color = TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun DailyRewardModal(
+    accent: Color,
+    coinColor: Color,
+    onClaim: () -> Unit,
+    onClose: () -> Unit
+) {
+    val strings = LocalStrings.current
+    val isFa = LocalLang.current == Lang.FA
+    ModalScaffold(accent = accent) {
+        Box(
+            Modifier
+                .size(96.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(
+                    Brush.radialGradient(
+                        listOf(accent.copy(alpha = 0.20f), accent.copy(alpha = 0.06f))
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            DailyIcon(modifier = Modifier.size(64.dp), tint = accent, animate = true)
+        }
+        Text(
+            text = if (isFa) "جایزه امروز" else "Today's Reward",
+            style = MaterialTheme.typography.headlineMedium,
+            color = TextPrimary,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(coinColor.copy(alpha = 0.16f), coinColor.copy(alpha = 0.08f))
+                    )
+                )
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(Modifier.size(22.dp)) {
+                CoinIcon(modifier = Modifier.fillMaxSize(), tint = coinColor, animate = true)
+            }
             Text(
-                text = if (hasHints) strings.youHaveNHints(wallet.freeHints) else strings.noHintsLabel,
+                text = if (isFa) toFaNum(Economy.COINS_PER_DAILY) else "${Economy.COINS_PER_DAILY}",
+                style = MaterialTheme.typography.titleLarge,
+                color = coinColor,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            Text(
+                text = if (isFa) "سکه" else "coins",
                 style = MaterialTheme.typography.titleMedium,
-                color = accent
+                color = coinColor,
+                maxLines = 1
             )
         }
         Text(
-            text = if (hasHints) strings.hintModalDesc else strings.hintModalDescEmpty,
+            text = if (isFa) "روزی یک بار" else "Once per day",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            maxLines = 1
         )
         ModalActionButton(
-            text = strings.watchAdForHint,
-            icon = { Icon(Icons.Outlined.Videocam, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+            text = strings.claimDailyReward,
+            icon = {
+                Icon(
+                    Icons.Outlined.Videocam,
+                    null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
             accent = accent,
             primary = true,
-            onClick = onWatchAd
-        )
-        ModalActionButton(
-            text = strings.buyHintComing,
-            icon = { Icon(Icons.Outlined.ShoppingCart, null, tint = TextMuted, modifier = Modifier.size(20.dp)) },
-            accent = accent,
-            primary = false,
-            onClick = onBuy
+            onClick = onClaim
         )
         TextButton(onClick = onClose) {
             Text(strings.close, color = TextSecondary)
@@ -489,23 +1250,39 @@ private fun HomeSettingsModal(
     val strings = LocalStrings.current
     ModalScaffold(accent = accent) {
         Box(
-            modifier = Modifier
+            Modifier
                 .size(72.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(accent.copy(alpha = 0.12f))
-                .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(20.dp)),
+                .clip(RoundedCornerShape(24.dp))
+                .background(
+                    Brush.radialGradient(
+                        listOf(accent.copy(alpha = 0.18f), accent.copy(alpha = 0.05f))
+                    )
+                ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Outlined.Settings, null, tint = accent, modifier = Modifier.size(36.dp))
+            Icon(
+                Icons.Outlined.Settings,
+                null,
+                tint = accent,
+                modifier = Modifier.size(36.dp)
+            )
         }
         Text(
             text = strings.settingsTitle,
             style = MaterialTheme.typography.headlineMedium,
             color = TextPrimary,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
         )
         SettingsRow(
-            icon = { Icon(Icons.Outlined.Language, null, tint = accent, modifier = Modifier.size(20.dp)) },
+            icon = {
+                Icon(
+                    Icons.Outlined.Language,
+                    null,
+                    tint = accent,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
             label = strings.languageLabel,
             value = if (currentLang == Lang.FA) strings.languageFa else strings.languageEn,
             onClick = onToggleLanguage,
@@ -514,8 +1291,10 @@ private fun HomeSettingsModal(
         SettingsRow(
             icon = {
                 Icon(
-                    imageVector = if (isMuted) Icons.AutoMirrored.Outlined.VolumeOff
-                                  else Icons.AutoMirrored.Outlined.VolumeUp,
+                    imageVector = if (isMuted)
+                        Icons.AutoMirrored.Outlined.VolumeOff
+                    else
+                        Icons.AutoMirrored.Outlined.VolumeUp,
                     contentDescription = null,
                     tint = accent,
                     modifier = Modifier.size(20.dp)
@@ -526,13 +1305,27 @@ private fun HomeSettingsModal(
             onClick = onToggleSound
         )
         SettingsRow(
-            icon = { Icon(Icons.Outlined.RestartAlt, null, tint = TextMuted, modifier = Modifier.size(20.dp)) },
+            icon = {
+                Icon(
+                    Icons.Outlined.RestartAlt,
+                    null,
+                    tint = TextMuted,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
             label = strings.resetProgressLabel,
             value = strings.comingSoonShort,
             muted = true
         )
         SettingsRow(
-            icon = { Icon(Icons.Outlined.Info, null, tint = accent, modifier = Modifier.size(20.dp)) },
+            icon = {
+                Icon(
+                    Icons.Outlined.Info,
+                    null,
+                    tint = accent,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
             label = strings.aboutLabel,
             value = "NumDoz v${AppInfo.VERSION_NAME}",
             muted = false
@@ -552,14 +1345,15 @@ private fun SettingsRow(
     muted: Boolean = false
 ) {
     Row(
-        modifier = Modifier
+        Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1A1A28))
-            .border(1.dp, Color(0x18FFFFFF), RoundedCornerShape(12.dp))
-            .then(
-                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(Color(0xFF23232F), Color(0xFF1A1A25))
+                )
             )
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -569,121 +1363,16 @@ private fun SettingsRow(
             text = label,
             style = MaterialTheme.typography.titleMedium,
             color = if (muted) TextMuted else TextPrimary,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (muted) TextMuted else TextSecondary
-        )
-    }
-}
-
-@Composable
-private fun HomeAdOverlay(adSeconds: Int, accent: Color) {
-    val strings = LocalStrings.current
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xE608080E))
-            .zIndex(20f),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 360.dp)
-                .padding(24.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFF12121D))
-                .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(strings.ad, style = MaterialTheme.typography.labelLarge, color = TextMuted)
-            Text(
-                text = strings.countdown(adSeconds),
-                style = MaterialTheme.typography.displayMedium,
-                color = accent,
-                fontWeight = FontWeight.Light
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(accent.copy(alpha = 0.06f))
-                    .border(1.dp, accent.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(strings.ad, color = TextMuted, style = MaterialTheme.typography.bodyMedium)
-            }
-            Text(
-                text = strings.adRewardMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModalScaffold(accent: Color, content: @Composable () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xCC08080E))
-            .zIndex(15f),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 380.dp)
-                .padding(24.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFF12121D))
-                .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            content()
-        }
-    }
-}
-
-@Composable
-private fun ModalActionButton(
-    text: String,
-    icon: @Composable () -> Unit,
-    accent: Color,
-    primary: Boolean,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (primary) accent.copy(alpha = 0.85f) else Color(0xFF1A1A28))
-            .border(
-                1.dp,
-                if (primary) Color.Transparent else Color(0x22FFFFFF),
-                RoundedCornerShape(14.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-        icon()
-        Spacer(Modifier.size(8.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (primary) Color.White else TextMuted,
-            fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Normal
+            color = if (muted) TextMuted else TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -691,109 +1380,6 @@ private fun ModalActionButton(
 private fun parseHex(hex: String): Color? = try {
     val h = hex.removePrefix("#")
     if (h.length == 6) Color(0xFF000000 or h.toLong(16)) else null
-} catch (_: Throwable) { null }
-
-@Composable
-private fun AdLoadingOverlay(accent: Color) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xCC08080E))
-            .zIndex(20f),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 320.dp)
-                .padding(24.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFF12121D))
-                .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            CircularProgressIndicator(color = accent, strokeWidth = 3.dp)
-            Text(
-                text = "در حال بارگذاری تبلیغ…",
-                style = MaterialTheme.typography.titleMedium,
-                color = TextSecondary
-            )
-        }
-    }
-}
-
-@Composable
-private fun AdErrorModal(
-    errorMessage: String,
-    accent: Color,
-    onRetry: () -> Unit,
-    onClose: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xCC08080E))
-            .zIndex(20f),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 360.dp)
-                .padding(24.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFF12121D))
-                .border(1.dp, Color(0xFFF87171).copy(alpha = 0.4f), RoundedCornerShape(24.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text(
-                text = "تبلیغ در دسترس نیست",
-                style = MaterialTheme.typography.headlineMedium,
-                color = TextPrimary,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "لطفاً اتصال اینترنت را بررسی کنید یا لحظه‌ای بعد دوباره تلاش کنید.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = errorMessage,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
-                color = TextMuted,
-                textAlign = TextAlign.Center
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF1A1A28))
-                        .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(12.dp))
-                        .clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("بستن", color = TextSecondary, style = MaterialTheme.typography.titleMedium)
-                }
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(accent.copy(alpha = 0.85f))
-                        .clickable(onClick = onRetry),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("تلاش دوباره", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
-    }
+} catch (_: Throwable) {
+    null
 }

@@ -1,0 +1,492 @@
+﻿package ir.numdoz.data.seed
+
+import ir.numdoz.data.model.Chapter
+import ir.numdoz.data.model.Level
+import ir.numdoz.data.model.PuzzleType
+import ir.numdoz.data.model.Section
+import ir.numdoz.data.model.Year
+
+object SeedData {
+
+    val years: List<Year> = listOf(
+        Year("arka", 0, "سال آرکا", "Year of Arka",
+            "نخستین سال تقویم عددچین. سفری میان چهار فصل ناشناخته.",
+            "First year of the NumDoz calendar.",
+            "#4FE3E0", "star", isLocked = false),
+        Year("lumena", 1, "سال لومِنا", "Year of Lumena",
+            "دومین سال تقویم — سفری به سرزمین‌های نور و راز. به‌زودی...",
+            "Second year — journey through light and mystery. Coming soon.",
+            "#F59E0B", "brightness", isLocked = true)
+    )
+
+    val chapters: List<Chapter> = listOf(
+        Chapter("kalira", "arka", 0, "کالیرا", "Kalira",
+            "سپیده‌دم — آغاز و روشنایی", "Dawn — beginning and light",
+            "#F59E0B", "sun", false),
+        Chapter("soreva", "arka", 1, "سورِوا", "Soreva",
+            "اقیانوس — جریان و آرامش", "Ocean — flow and calm",
+            "#0EA5E9", "wave", false),
+        Chapter("vexira", "arka", 2, "وکسیرا", "Vexira",
+            "آتش — قدرت و گرما", "Fire — power and heat",
+            "#EF4444", "flame", false),
+        Chapter("nivala", "arka", 3, "نیوالا", "Nivala",
+            "یخ — راز و سکون", "Ice — mystery and stillness",
+            "#A855F7", "snow", false)
+    )
+
+    val sections: List<Section> = listOf(
+        Section("kalira_lumis",   "kalira", 0, "لومیس",   "Lumis",   0,
+            "نخستین ماه از فصل کالیرا — ماه بیداری نور و آغاز سفر",
+            "First month of Kalira — awakening of light",
+            "sunrise", "#F59E0B"),
+        Section("kalira_auriel",  "kalira", 1, "آئوریل",  "Auriel",  1,
+            "دومین ماه — ماه طلوع طلایی و شکوفایی کامل",
+            "Second month — golden dawn",
+            "brightness", "#FB923C"),
+        Section("kalira_zephra",  "kalira", 2, "زِفرا",    "Zephra",  2,
+            "سومین ماه — ماه نسیم شکوفه و شکوفایی طبیعت",
+            "Third month — blossom breeze",
+            "wind", "#FCD34D"),
+        Section("soreva_tidalis", "soreva", 0, "تیدالیس", "Tidalis", 0,
+            "نخستین ماه از فصل سورِوا — ماه نخستین موج و آغاز جریان",
+            "First month of Soreva — first wave",
+            "wave", "#0EA5E9"),
+        Section("soreva_aqualin", "soreva", 1, "آکوآلین", "Aqualin", 1,
+            "دومین ماه — ماه ژرفای آب و رازهای اقیانوس",
+            "Second month — deep water",
+            "water", "#0284C7"),
+        Section("soreva_mistrel", "soreva", 2, "میسترِل",  "Mistrel", 2,
+            "سومین ماه — ماه مه و پرده‌های اسرارآمیز دریا",
+            "Third month — mist",
+            "cloud", "#7DD3FC"),
+        Section("vexira_emberis", "vexira", 0, "امبریس",  "Emberis", 0,
+            "نخستین ماه از فصل وکسیرا — ماه اخگر و آغاز گرما",
+            "First month of Vexira — ember",
+            "ember", "#EF4444"),
+        Section("vexira_pyrosa",  "vexira", 1, "پایروزا", "Pyrosa",  1,
+            "دومین ماه — ماه شعله‌های سرکش و قدرت آتش",
+            "Second month — flame",
+            "flame", "#DC2626"),
+        Section("vexira_solmar",  "vexira", 2, "سولمار",  "Solmar",  2,
+            "سومین ماه — ماه غروب سرخ و آخرین گرمای خورشید",
+            "Third month — sunset",
+            "sunset", "#F97316"),
+        Section("nivala_frostel", "nivala", 0, "فروستل",  "Frostel", 0,
+            "نخستین ماه از فصل نیوالا — ماه نخستین شبنم یخ و آغاز سکون",
+            "First month of Nivala — first frost",
+            "snow", "#A855F7"),
+        Section("nivala_nyxara",  "nivala", 1, "نیکسارا", "Nyxara",  1,
+            "دومین ماه — ماه آسمان شب و ستارگان سرد",
+            "Second month — night sky",
+            "moon", "#8B5CF6"),
+        Section("nivala_glacira", "nivala", 2, "گلاسیرا", "Glacira", 2,
+            "سومین ماه — ماه یخچال و ژرفای سرمای ابدی",
+            "Third month — glacier",
+            "star", "#C4B5FD")
+    )
+
+    val levels: List<Level> = buildList {
+        sections.forEachIndexed { globalIdx, sec ->
+            for (day in 1..30) add(generateLevel(sec.id, day, globalIdx))
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // 360 UNIQUE LEVELS — 25 distinct pattern types
+    // `gi` is global month index (0..11), `m = gi + 1` (1..12)
+    // Every parameter is a function of (day, m) → no repetition.
+    // ══════════════════════════════════════════════════════════════
+    private fun generateLevel(secId: String, day: Int, gi: Int): Level {
+        val m = gi + 1
+        return when (day) {
+            // ═══════════════════════════════════════════════════════
+            // TIER 1 — BASICS (month 1-3, days 1-10)
+            // ═══════════════════════════════════════════════════════
+            1 -> arith(secId, day, m, 1, 1)                    // +1, +2, +3...
+            2 -> arith(secId, day, 2*m, 2, 1)                  // +2, +4, +6...
+            3 -> arith(secId, day, 3*m+1, 3, 2)                // +3, +6, +9...
+            4 -> arithDesc(secId, day, 100+10*m, 5, 2)         // -5, -10, -15...
+            5 -> lettersSkip(secId, day, ('A' + (m-1)), 1, 2)   // A,B,C,D... / L,M,N,O...
+            6 -> lettersSkip(secId, day, ('A' + (m-1)), 2, 2)   // A,C,E,G... / L,N,P,R...
+            7 -> squares(secId, day, m, 2)                     // 1², 2², 3²... / 12², 13²...
+            8 -> squares(secId, day, 20 + m, 2)                // 21², 22², 23²... / 32², 33²...
+            9 -> fib(secId, day, 1, 1+m, 3)                    // (1,2), (1,3)... / (1,13)
+            10 -> triangular(secId, day, m, 3)                  // 1,3,6,10... / 12,25,39...
+
+            // ═══════════════════════════════════════════════════════
+            // TIER 2 — INTERMEDIATE (days 11-20)
+            // ═══════════════════════════════════════════════════════
+            11 -> fib(secId, day, 2+m, 3+m, 4)                 // (3,4), (4,5)... / (14,15)
+            12 -> cubes(secId, day, m, 4)                      // 1³, 2³, 3³... / 12³, 13³...
+            13 -> geo(secId, day, m, 2, 3)                     // ×2: 1,2,4,8... / 12,24,48...
+            14 -> geo(secId, day, 1+m, 3, 3)                   // ×3: 2,6,18,54... / 13,39,117...
+            15 -> pronic(secId, day, m, 3)                     // n(n+1): 2,6,12,20... / 156,182...
+            16 -> primes(secId, day, m, 1, 4)                  // primes stride 1 from idx m
+            17 -> primes(secId, day, m, 2, 4)                  // primes stride 2 from idx m
+            18 -> alternating(secId, day, 10+2*m, 3, 1, 4)     // +3,-1,+3,-1...
+            19 -> letterNumber(secId, day, 1+m, 3)             // B2,C3,D4... / M13,N14...
+            20 -> twoStep(secId, day, 1+m, 4)                  // +1,+2,+3,+4...
+
+            // ═══════════════════════════════════════════════════════
+            // TIER 3 — ADVANCED (days 21-30)
+            // ═══════════════════════════════════════════════════════
+            21 -> multiplyAdd(secId, day, 1+m, 2, 1, 5)        // n×2+1: 2,5,11,23...
+            22 -> lookAndSay(secId, day, 1+m, 6)               // 1,11,21,1211... / 2,12,1112...
+            23 -> recThree(secId, day, 1, 1, 1+m, 6)           // aₙ=aₙ₋₁+aₙ₋₂+aₙ₋₃
+            24 -> catalan(secId, day, m, 6)                    // 1,2,5,14... / 12,13,14,15 idx
+            25 -> descendingSquares(secId, day, 100+m, 6)      // 10²,9²,8²... / reverse squares
+            26 -> factorialDiff(secId, day, 1+m, 7)            // 0!,1!,2!... differences
+            27 -> keyboardLetters(secId, day, m, 7)            // Q,W,E,R... starting offset m
+            28 -> monthLetters(secId, day, m, 7)               // J,F,M,A,M,J... starting offset m
+            29 -> ordinalsLetters(secId, day, m, 8)            // F,S,T,F,F,S... starting offset m
+            30 -> bossFinal(secId, day, m, 8)                  // hardest — complex mix
+
+            else -> arith(secId, day, 1, 1, 1)
+        }
+    }
+
+    // ─── Core Helper ───
+    private fun lvl(
+        secId: String, day: Int, type: PuzzleType, difficulty: Int,
+        seq: String, ans: String,
+        titleFa: String, titleEn: String,
+        h1fa: String, h1en: String, h2fa: String, h2en: String,
+        efa: String, een: String
+    ): Level = Level(
+        id = "${secId}_d${day.toString().padStart(2, '0')}",
+        sectionId = secId, orderIndex = day - 1, dayNumber = day,
+        titleFa = titleFa, titleEn = titleEn, puzzleType = type,
+        difficulty = difficulty, timeLimitSeconds = 60,
+        sequence = seq, correctAnswer = ans,
+        hint1Fa = h1fa, hint1En = h1en, hint2Fa = h2fa, hint2En = h2en,
+        explanationFa = efa, explanationEn = een
+    )
+
+    // ══════════════════════════════════════════════════════════════
+    // GENERATORS — all 25 types, parameterised by m (month 1..12)
+    // ══════════════════════════════════════════════════════════════
+
+    // 1. Arithmetic increasing
+    private fun arith(secId: String, day: Int, start: Int, step: Int, diff: Int): Level {
+        val seq = (0 until 5).map { start + step * it }
+        val ans = start + step * 5
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans.toString(),
+            "دنباله‌ی افزایشی", "Ascending sequence",
+            "به اختلاف دو عدد پی‌درپی نگاه کن", "Look at consecutive differences",
+            "هر بار $step تا اضافه می‌شه", "Add $step each time",
+            "دنباله‌ی حسابی با گام $step", "Arithmetic, step $step")
+    }
+
+    // 2. Arithmetic descending
+    private fun arithDesc(secId: String, day: Int, start: Int, step: Int, diff: Int): Level {
+        val seq = (0 until 5).map { start - step * it }
+        val ans = start - step * 5
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans.toString(),
+            "دنباله‌ی کاهشی", "Descending sequence",
+            "هر عدد کوچک‌تر است", "Each is smaller",
+            "هر بار $step تا کم می‌شه", "Subtract $step each time",
+            "دنباله‌ی نزولی با گام $step", "Descending, step $step")
+    }
+
+    // 3. Geometric
+    private fun geo(secId: String, day: Int, start: Int, ratio: Int, diff: Int): Level {
+        val seq = mutableListOf(start)
+        for (i in 1 until 4) seq += seq.last() * ratio
+        val ans = seq.last() * ratio
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans.toString(),
+            "دنباله‌ی هندسی", "Geometric",
+            "هر عدد چند برابر قبلی؟", "How many times previous?",
+            "هر بار در $ratio ضرب می‌شه", "Multiply by $ratio",
+            "تصاعد هندسی، نسبت $ratio", "Geometric, ratio $ratio")
+    }
+
+    // 4. Squares
+    private fun squares(secId: String, day: Int, startN: Int, diff: Int): Level {
+        val seq = (0 until 4).map { val v = startN + it; v * v }
+        val last = startN + 4
+        val ans = (last * last).toString()
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "مربع اعداد", "Squares",
+            "۱×۱، ۲×۲، ۳×۳", "1×1, 2×2, 3×3",
+            "توان دوم اعداد طبیعی", "Squares of naturals",
+            "مربع از $startN تا $last", "Squares $startN..$last")
+    }
+
+    // 5. Cubes
+    private fun cubes(secId: String, day: Int, startN: Int, diff: Int): Level {
+        val seq = (0 until 4).map { val v = startN + it; v * v * v }
+        val last = startN + 4
+        val ans = (last * last * last).toString()
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "مکعب اعداد", "Cubes",
+            "توان سوم اعداد", "Cubes of naturals",
+            "۱³، ۲³، ۳³، ۴³", "1³, 2³, 3³, 4³",
+            "مکعب از $startN تا $last", "Cubes $startN..$last")
+    }
+
+    // 6. Pronic (n×(n+1))
+    private fun pronic(secId: String, day: Int, startN: Int, diff: Int): Level {
+        val seq = (0 until 4).map { val v = startN + it; v * (v + 1) }
+        val last = startN + 4
+        val ans = (last * (last + 1)).toString()
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "اعداد پرونیک", "Pronic numbers",
+            "حاصل‌ضرب دو عدد متوالی: n×(n+1)", "Product of consecutive: n×(n+1)",
+            "هر عدد = n × (n+1)", "Each = n × (n+1)",
+            "اعداد مستطیلی (پرونیک)", "Pronic (rectangular) numbers")
+    }
+
+    // 7. Fibonacci
+    private fun fib(secId: String, day: Int, a: Int, b: Int, diff: Int): Level {
+        val seq = mutableListOf(a, b)
+        for (i in 2 until 5) seq += seq[i - 1] + seq[i - 2]
+        val ans = seq.last() + seq[seq.size - 2]
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans.toString(),
+            "فیبوناچی", "Fibonacci",
+            "جمع دو عدد قبلی؟", "Sum of previous two?",
+            "هر عدد = دو عدد قبل", "Each = sum of previous two",
+            "دنباله‌ی فیبوناچی", "Fibonacci")
+    }
+
+    // 8. Triangular
+    private fun triangular(secId: String, day: Int, start: Int, diff: Int): Level {
+        val seq = mutableListOf(start)
+        for (i in 1 until 5) seq += seq.last() + (start + i)
+        val ans = seq.last() + (start + 5)
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans.toString(),
+            "اعداد مثلثی", "Triangular",
+            "به اختلاف‌ها نگاه کن", "Look at the differences",
+            "اختلاف‌ها یک واحد زیاد می‌شن", "Differences +1",
+            "دنباله‌ی مثلثی", "Triangular")
+    }
+
+    // 9. Primes with stride
+    private fun primes(secId: String, day: Int, startIdx: Int, stride: Int, diff: Int): Level {
+        val primes = listOf(2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97)
+        val seq = (0 until 4).map { primes[startIdx + stride * it] }
+        val ans = primes[startIdx + stride * 4]
+        val strideFa = if (stride > 1) "با گام $stride" else ""
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans.toString(),
+            "اعداد اول", "Primes",
+            "به بخش‌پذیری فکر کن", "Think about divisibility",
+            "اعداد اول $strideFa", "Primes with stride $stride",
+            "دنباله‌ی اعداد اول", "Prime sequence")
+    }
+
+    // 10. Letters skip
+    private fun lettersSkip(secId: String, day: Int, start: Char, step: Int, diff: Int): Level {
+        val seq = (0 until 4).map { (start + step * it).toString() }
+        val ans = (start + step * 4).toString()
+        return lvl(secId, day, PuzzleType.LETTER, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "حروف با پرش", "Skipping letters",
+            "به فاصله‌ی حروف نگاه کن", "Look at letter gaps",
+            "پرش $step", "Skip $step",
+            "حروف با فاصله‌ی $step", "Letters skip $step")
+    }
+
+    // 11. Letter + Number pair
+    private fun letterNumber(secId: String, day: Int, startNum: Int, diff: Int): Level {
+        val seq = (0 until 4).map { i -> val n = startNum + i; "${('A' + (n - 1))}$n" }
+        val lastN = startNum + 4
+        val ans = "${('A' + (lastN - 1))}$lastN"
+        return lvl(secId, day, PuzzleType.MIXED, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "حرف و عدد", "Letter + number",
+            "هر حرف با یک عدد", "Each letter with a number",
+            "حرف و عدد هم‌راستا", "Letter with number",
+            "ترکیب حرف و عدد", "Letter-number")
+    }
+
+    // 12. Alternating
+    private fun alternating(secId: String, day: Int, start: Int, plusA: Int, minusB: Int, diff: Int): Level {
+        val seq = mutableListOf(start)
+        for (i in 1 until 5) {
+            if (i % 2 == 1) seq += seq.last() + plusA
+            else seq += seq.last() - minusB
+        }
+        val ans = if (5 % 2 == 1) seq.last() + plusA else seq.last() - minusB
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans.toString(),
+            "جمع و تفریق متناوب", "Alternating",
+            "به جهت تغییرات نگاه کن", "Direction of changes",
+            "+$plusA و −$minusB متناوب", "+$plusA and −$minusB",
+            "الگوی متناوب", "Alternating")
+    }
+
+    // 13. Two-step (increasing differences)
+    private fun twoStep(secId: String, day: Int, start: Int, diff: Int): Level {
+        val seq = mutableListOf(start)
+        for (i in 1 until 5) seq += seq.last() + i
+        val ans = seq.last() + 5
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans.toString(),
+            "گام افزایشی", "Increasing steps",
+            "به اختلاف‌ها نگاه کن", "Look at differences",
+            "هر بار یک واحد بیشتر", "One more each time",
+            "گام‌های ۱،۲،۳،۴،۵", "Steps 1,2,3,4,5")
+    }
+
+    // 14. Multiply & add
+    private fun multiplyAdd(secId: String, day: Int, start: Int, k: Int, c: Int, diff: Int): Level {
+        val seq = mutableListOf(start)
+        for (i in 1 until 5) seq += seq.last() * k + c
+        val ans = seq.last() * k + c
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans.toString(),
+            "ضرب و جمع", "Multiply and add",
+            "هر عدد = قبلی × $k + $c", "Each = previous × $k + $c",
+            "فرمول: x × $k + $c", "x × $k + $c",
+            "الگوی ضرب و جمع", "Multiply-add pattern")
+    }
+
+    // 15. Look-and-say
+    private fun lookAndSay(secId: String, day: Int, start: Int, diff: Int): Level {
+        var current = start.toString()
+        val seq = mutableListOf<String>()
+        repeat(4) {
+            seq += current
+            val sb = StringBuilder()
+            var i = 0
+            while (i < current.length) {
+                var count = 1
+                while (i + count < current.length && current[i + count] == current[i]) count++
+                sb.append(count).append(current[i])
+                i += count
+            }
+            current = sb.toString()
+        }
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", current,
+            "بگو و بشمار", "Look-and-say",
+            "هر جمله را با خواندن قبلی بساز", "Read previous aloud to build next",
+            "مثال: ${seq[0]} → ${seq[1]}", "Example: ${seq[0]} → ${seq[1]}",
+            "دنباله‌ی look-and-say", "Look-and-say sequence")
+    }
+
+    // 16. Recursive three terms
+    private fun recThree(secId: String, day: Int, a: Int, b: Int, c: Int, diff: Int): Level {
+        val seq = mutableListOf(a, b, c)
+        for (i in 3 until 5) seq += seq[i - 1] + seq[i - 2] + seq[i - 3]
+        val ans = seq.last() + seq[seq.size - 2] + seq[seq.size - 3]
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans.toString(),
+            "جمع سه جمله", "Sum of three",
+            "جمع سه عدد قبلی", "Sum of three previous",
+            "aₙ = aₙ₋₁ + aₙ₋₂ + aₙ₋₃", "aₙ = aₙ₋₁ + aₙ₋₂ + aₙ₋₃",
+            "بازگشتی سه‌جمله‌ای", "Three-term recursion")
+    }
+
+    // 17. Catalan
+    private fun catalan(secId: String, day: Int, startIdx: Int, diff: Int): Level {
+        val catalan = listOf(1L,1L,2L,5L,14L,42L,132L,429L,1430L,4862L,16796L,58786L,208012L,742900L,2674440L)
+        val seq = (0 until 4).map { catalan[startIdx + it].toString() }
+        val ans = catalan[startIdx + 4].toString()
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "اعداد کاتالان", "Catalan numbers",
+            "فرمول بازگشتی: Cₙ = Σ Cᵢ·Cₙ₋₁₋ᵢ", "Recursive: Cₙ = Σ Cᵢ·Cₙ₋₁₋ᵢ",
+            "۱، ۲، ۵، ۱۴، ۴۲، ۱۳۲...", "1, 2, 5, 14, 42, 132...",
+            "دنباله‌ی کاتالان", "Catalan sequence")
+    }
+
+    // 18. Descending squares
+    private fun descendingSquares(secId: String, day: Int, startN: Int, diff: Int): Level {
+        val seq = (0 until 4).map { val v = startN - it; v * v }
+        val last = startN - 4
+        val ans = (last * last).toString()
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "مربع نزولی", "Descending squares",
+            "به ترتیب نزولی: ۱۰²، ۹²، ۸²", "10², 9², 8² descending",
+            "توان دوم با پایه‌ی نزولی", "Squares with descending base",
+            "مربع از $startN تا $last (نزولی)", "Squares $startN..$last (descending)")
+    }
+
+    // 19. Factorial differences
+    private fun factorialDiff(secId: String, day: Int, startN: Int, diff: Int): Level {
+        val seq = mutableListOf(0L)
+        var fact = 1L
+        for (i in 1 until 5) {
+            fact *= i
+            seq += seq.last() + fact
+        }
+        val nextFact = fact * 5
+        val ans = (seq.last() + nextFact).toString()
+        return lvl(secId, day, PuzzleType.NUMBER, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "تفاضل فاکتوریل", "Factorial differences",
+            "به اختلاف‌ها نگاه کن: ۱، ۲، ۶، ۲۴", "Differences: 1, 2, 6, 24",
+            "اختلاف‌ها = n!", "Differences = n!",
+            "جمع فاکتوریل‌ها", "Sum of factorials")
+    }
+
+    // 20. Keyboard letters
+    private fun keyboardLetters(secId: String, day: Int, offset: Int, diff: Int): Level {
+        val keyboard = listOf('Q','W','E','R','T','Y','U','I','O','P','A','S','D','F','G','H','J','K','L','Z','X','C','V','B','N','M')
+        val start = (offset - 1) % (keyboard.size - 4)
+        val seq = (0 until 4).map { keyboard[start + it].toString() }
+        val ans = keyboard[start + 4].toString()
+        return lvl(secId, day, PuzzleType.LETTER, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "حروف کیبورد", "Keyboard letters",
+            "به ترتیب چیدمان کیبورد", "In keyboard layout order",
+            "${seq[0]} ${seq[1]} ${seq[2]} ${seq[3]}...", "${seq[0]} ${seq[1]} ${seq[2]} ${seq[3]}...",
+            "حروف کیبورد", "Keyboard letters")
+    }
+
+    // 21. Month letters
+    private fun monthLetters(secId: String, day: Int, offset: Int, diff: Int): Level {
+        val months = listOf('J','F','M','A','M','J','J','A','S','O','N','D')
+        val start = (offset - 1) % (months.size - 4)
+        val seq = (0 until 4).map { months[start + it].toString() }
+        val ans = months[start + 4].toString()
+        return lvl(secId, day, PuzzleType.LETTER, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "حروف ماه‌ها", "Month letters",
+            "حرف اول ماه‌های میلادی", "First letters of months",
+            "${seq[0]} ${seq[1]} ${seq[2]} ${seq[3]}...", "${seq[0]} ${seq[1]} ${seq[2]} ${seq[3]}...",
+            "حروف اول ماه", "First letters of months")
+    }
+
+    // 22. Ordinals letters
+    private fun ordinalsLetters(secId: String, day: Int, offset: Int, diff: Int): Level {
+        val ordinals = listOf('F','S','T','F','F','S','S','E','N','T')
+        val start = (offset - 1) % (ordinals.size - 4)
+        val seq = (0 until 4).map { ordinals[start + it].toString() }
+        val ans = ordinals[start + 4].toString()
+        return lvl(secId, day, PuzzleType.LETTER, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "حروف ترتیبی", "Ordinal letters",
+            "حرف اول اعداد ترتیبی", "First letter of ordinals",
+            "first→F، second→S، third→T، fourth→F...", "first→F, second→S, third→T, fourth→F...",
+            "حروف اعداد ترتیبی", "Ordinal numbers letters")
+    }
+
+    // 23. Boss — hard mixed
+    private fun bossFinal(secId: String, day: Int, m: Int, diff: Int): Level {
+        val base = m
+        val seq = listOf(
+            "${('A' + base - 1)}${base}",
+            "${('B' + base - 1)}${base * 2}",
+            "${('C' + base - 1)}${base * 2 + 3}",
+            "${('D' + base - 1)}${base * 2 + 6}"
+        )
+        val ans = "${('E' + base - 1)}${base * 2 + 9}"
+        return lvl(secId, day, PuzzleType.MIXED, diff,
+            seq.joinToString(", ") + ", ?", ans,
+            "الگوی ترکیبی نهایی", "Final mixed pattern",
+            "حرف + عدد را جدا حساب کن", "Handle letter and number separately",
+            "حرف: +1 هر بار؛ عدد: اول +$base بعد +3", "Letter: +1 each; Number: first +$base then +3",
+            "ترکیب حرف و عدد با گام متغیر", "Mixed letter-number with variable step")
+    }
+}

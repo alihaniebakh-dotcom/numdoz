@@ -1,4 +1,4 @@
-﻿package ir.numdoz
+package ir.numdoz
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

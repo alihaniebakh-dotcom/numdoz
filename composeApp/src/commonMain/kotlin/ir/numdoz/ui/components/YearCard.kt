@@ -7,7 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,7 +29,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ir.numdoz.ui.theme.BorderHair
 import ir.numdoz.ui.theme.SurfaceMin
 import ir.numdoz.ui.theme.TextMuted
 import ir.numdoz.ui.theme.TextPrimary
@@ -56,74 +54,76 @@ fun YearCard(
         ),
         label = "pulse"
     )
-    val borderAlpha = if (locked) 0.15f else pulse
+    val intensity = if (locked) 0.3f else pulse
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .drawBehind {
                 if (!locked) {
-                    val r = size.height * 1.2f
+                    val r = size.height * 1.3f
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(
-                                accent.copy(alpha = 0.16f * pulse),
-                                Color.Transparent
-                            ),
+                            colors = listOf(accent.copy(alpha = 0.18f * pulse), Color.Transparent),
                             center = Offset(size.width / 2f, size.height / 2f),
                             radius = r
                         ),
-                        radius = r,
-                        center = Offset(size.width / 2f, size.height / 2f)
+                        radius = r, center = Offset(size.width / 2f, size.height / 2f)
                     )
                 }
             }
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(26.dp))
             .background(
-                Brush.verticalGradient(
+                Brush.radialGradient(
                     colors = listOf(
-                        SurfaceMin.copy(alpha = 0.62f),
-                        SurfaceMin.copy(alpha = 0.42f)
-                    )
+                        accent.copy(alpha = 0.10f * intensity),
+                        SurfaceMin.copy(alpha = 0.65f),
+                        SurfaceMin.copy(alpha = 0.40f)
+                    ),
+                    center = Offset.Unspecified
                 )
-            )
-            .border(
-                width = if (locked) 1.dp else 1.2.dp,
-                color = if (locked) BorderHair else accent.copy(alpha = borderAlpha),
-                shape = RoundedCornerShape(24.dp)
             )
             .clickable(enabled = !locked, onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 26.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentAlignment = Alignment.Center
     ) {
-        LogoCircle(logoName = logoName, accent = accent, size = 88.dp, dim = locked)
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineLarge,
-            color = if (locked) TextMuted else TextPrimary,
-            fontWeight = FontWeight.Medium
-        )
-        Text(
-            text = titleEn,
-            style = MaterialTheme.typography.labelLarge,
-            color = accent.copy(alpha = if (locked) 0.45f else 0.9f)
-        )
-        if (locked) {
-            Spacer(Modifier.height(4.dp))
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(accent.copy(alpha = 0.15f))
-                    .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = comingSoonLabel,
-                    color = accent.copy(alpha = 0.95f),
-                    style = MaterialTheme.typography.labelLarge
-                )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ShapeLogo(
+                logoName = logoName,
+                shape = shapeForYear(logoName),
+                accent = accent,
+                size = 92.dp,
+                dim = locked
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineLarge,
+                color = if (locked) TextMuted else TextPrimary,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = titleEn,
+                style = MaterialTheme.typography.labelLarge,
+                color = accent.copy(alpha = if (locked) 0.45f else 0.9f)
+            )
+            if (locked) {
+                Spacer(Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(accent.copy(alpha = 0.12f))
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = comingSoonLabel,
+                        color = accent.copy(alpha = 0.95f),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
             }
         }
     }

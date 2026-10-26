@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 
 val LocalAccent = staticCompositionLocalOf { NeonCyan }
 val LocalAccentAlt = staticCompositionLocalOf { NeonPurple }
+val LocalAccentTertiary = staticCompositionLocalOf { NeonPink }
 
 fun spectrumColor(hue: Float, saturation: Float = 0.85f, lightness: Float = 0.62f): Color {
     val h = ((hue % 360f) + 360f) % 360f
