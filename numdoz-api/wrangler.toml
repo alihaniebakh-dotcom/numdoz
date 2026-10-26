@@ -1,0 +1,8 @@
+﻿name = "numdoz-api"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "numdoz-db"
+database_id = "4b63d012-f5c7-42ad-9c2a-eb4024d76ed1"
