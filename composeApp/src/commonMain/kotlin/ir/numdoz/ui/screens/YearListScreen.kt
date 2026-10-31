@@ -88,6 +88,16 @@ import ir.numdoz.util.currentTimeMillis
 import ir.numdoz.util.isSameLocalDay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawBehind
 
 @Composable
 fun YearListScreen(
@@ -96,7 +106,8 @@ fun YearListScreen(
     onLanguageChange: (Lang) -> Unit,
     onTintChange: (Color?) -> Unit,
     onYearClick: (String) -> Unit,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    onShopClick: () -> Unit = {}
 ) {
     val audio = LocalAudio.current
     val adManager = LocalAdManager.current
@@ -374,10 +385,13 @@ fun YearListScreen(
             }
             Spacer(Modifier.size(2.dp))
 
-            // Coin chip
-            CoinChip(
-                count = wallet.coins,
-                color = coinColor,
+            // Combined wallet pill (coins + daily + shop)
+            WalletPill(
+                coins = wallet.coins,
+                canClaimDaily = canClaimDaily,
+                coinColor = coinColor,
+                giftColor = giftColor,
+                isFa = lang == Lang.FA,
                 onClick = {
                     audio.playSfx(Sfx.CLICK)
                     showHintModal = false
@@ -387,31 +401,6 @@ fun YearListScreen(
                     showCoinModal = true
                 }
             )
-
-            // Daily gift (only if claimable)
-            if (canClaimDaily) {
-                StatusIconButton(
-                    count = 0,
-                    tint = giftColor,
-                    animate = true,
-                    onClick = {
-                        audio.playSfx(Sfx.CLICK)
-                        showHintModal = false
-                        showTimeCapsuleModal = false
-                        showSettingsModal = false
-                        showCoinModal = false
-                        showDailyModal = true
-                    }
-                ) { s ->
-                    Box(Modifier.size(s)) {
-                        DailyIcon(
-                            modifier = Modifier.fillMaxSize(),
-                            tint = giftColor,
-                            animate = true
-                        )
-                    }
-                }
-            }
 
             // Time capsule
             StatusIconButton(
@@ -488,10 +477,16 @@ fun YearListScreen(
         // ────── MODALS ──────
 
         if (showCoinModal) {
-            CoinModal(
+            CoinHubModal(
                 coins = wallet.coins,
+                canClaimDaily = canClaimDaily,
                 accent = coinColor,
+                coinColor = coinColor,
+                giftColor = giftColor,
+                shopColor = Color(0xFF6EC8FF),
                 onWatchAd = { showCoinModal = false; watchAdFor("coins") },
+                onDaily = { showCoinModal = false; showDailyModal = true },
+                onBuyCoins = { showCoinModal = false; onShopClick() },
                 onClose = { audio.playSfx(Sfx.CLICK); showCoinModal = false }
             )
         }
@@ -1382,4 +1377,326 @@ private fun parseHex(hex: String): Color? = try {
     if (h.length == 6) Color(0xFF000000 or h.toLong(16)) else null
 } catch (_: Throwable) {
     null
+}
+
+
+@Composable
+private fun WalletPill(
+    coins: Int,
+    canClaimDaily: Boolean,
+    coinColor: Color,
+    giftColor: Color,
+    isFa: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(coinColor.copy(alpha = 0.18f), coinColor.copy(alpha = 0.06f))
+                )
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(Modifier.size(20.dp)) {
+            CoinIcon(modifier = Modifier.fillMaxSize(), tint = coinColor, animate = true)
+        }
+        Text(
+            text = if (coins > 999)
+                (if (isFa) "۹۹۹+" else "999+")
+            else
+                (if (isFa) toFaNum(coins) else "$coins"),
+            style = MaterialTheme.typography.titleMedium,
+            color = coinColor,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+        if (canClaimDaily) {
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(giftColor.copy(alpha = 0.28f)),
+                contentAlignment = Alignment.Center
+            ) {
+                DailyIcon(modifier = Modifier.size(12.dp), tint = giftColor, animate = true)
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun CoinHubActionCard(
+    accent: Color,
+    icon: @Composable () -> Unit,
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = tween(120),
+        label = "coinHubCardPress"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.horizontalGradient(
+                    colors = if (enabled)
+                        listOf(accent.copy(alpha = 0.18f), accent.copy(alpha = 0.06f))
+                    else
+                        listOf(accent.copy(alpha = 0.06f), accent.copy(alpha = 0.02f))
+                )
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        accent.copy(alpha = if (enabled) 0.35f else 0.10f),
+                        Color.Transparent
+                    )
+                ),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            Modifier
+                .size(52.dp)
+                .drawBehind {
+                    val r = size.minDimension / 2f
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                accent.copy(alpha = if (enabled) 0.35f else 0.12f),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = r * 1.2f
+                        ),
+                        radius = r * 1.2f
+                    )
+                }
+                .clip(RoundedCornerShape(26.dp))
+                .background(
+                    Brush.radialGradient(
+                        listOf(
+                            accent.copy(alpha = if (enabled) 0.28f else 0.10f),
+                            accent.copy(alpha = if (enabled) 0.10f else 0.04f)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) { icon() }
+
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (enabled) TextPrimary else TextMuted,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+            Spacer(Modifier.size(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (enabled) TextSecondary else TextMuted.copy(alpha = 0.6f),
+                maxLines = 1
+            )
+        }
+
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = if (enabled) accent.copy(alpha = 0.7f) else TextMuted.copy(alpha = 0.4f),
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun CoinHubModal(
+    coins: Int,
+    canClaimDaily: Boolean,
+    accent: Color,
+    coinColor: Color,
+    giftColor: Color,
+    shopColor: Color,
+    onWatchAd: () -> Unit,
+    onDaily: () -> Unit,
+    onBuyCoins: () -> Unit,
+    onClose: () -> Unit
+) {
+    val isFa = LocalLang.current == Lang.FA
+    val strings = LocalStrings.current
+
+
+    val coinAnim = rememberInfiniteTransition(label = "coinHubPulse")
+    val coinPulse by coinAnim.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.10f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "coinPulseScale"
+    )
+    val coinWiggle by coinAnim.animateFloat(
+        initialValue = -5f,
+        targetValue = 5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "coinPulseRotate"
+    )
+
+    ModalScaffold(accent = accent) {
+        Box(
+            Modifier
+                .size(104.dp)
+                .drawBehind {
+                    val r = size.minDimension / 2f
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                coinColor.copy(alpha = 0.30f),
+                                coinColor.copy(alpha = 0.08f),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = r * 1.15f
+                        ),
+                        radius = r * 1.15f
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                Modifier
+                    .size(80.dp)
+                    .graphicsLayer {
+                        scaleX = coinPulse
+                        scaleY = coinPulse
+                        rotationZ = coinWiggle
+                    }
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                coinColor.copy(alpha = 0.40f),
+                                coinColor.copy(alpha = 0.12f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                CoinIcon(modifier = Modifier.size(52.dp), tint = coinColor, animate = true)
+            }
+        }
+
+        Text(
+            text = if (isFa) "کیف پول" else "Wallet",
+            style = MaterialTheme.typography.headlineMedium,
+            color = TextPrimary,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(coinColor.copy(alpha = 0.24f), coinColor.copy(alpha = 0.10f))
+                    )
+                )
+                .padding(horizontal = 28.dp, vertical = 12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(Modifier.size(22.dp)) {
+                    CoinIcon(modifier = Modifier.fillMaxSize(), tint = coinColor, animate = true)
+                }
+                Text(
+                    text = if (isFa) toFaNum(coins) else "$coins",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = coinColor,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Text(
+                    text = if (isFa) "سکه" else "coins",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = coinColor.copy(alpha = 0.85f),
+                    maxLines = 1
+                )
+            }
+        }
+
+        Spacer(Modifier.size(8.dp))
+
+        CoinHubActionCard(
+            accent = accent,
+            icon = {
+                Icon(Icons.Outlined.Videocam, contentDescription = null, tint = accent, modifier = Modifier.size(26.dp))
+            },
+            title = if (isFa) "تماشای تبلیغ" else "Watch an ad",
+            subtitle = if (isFa) "+${toFaNum(Economy.COINS_PER_AD)} سکه رایگان" else "+${Economy.COINS_PER_AD} free coins",
+            enabled = true,
+            onClick = onWatchAd
+        )
+
+        CoinHubActionCard(
+            accent = giftColor,
+            icon = {
+                DailyIcon(modifier = Modifier.size(26.dp), tint = giftColor, animate = canClaimDaily)
+            },
+            title = if (isFa) "جایزه روزانه" else "Daily reward",
+            subtitle = if (canClaimDaily)
+                (if (isFa) "+${toFaNum(Economy.COINS_PER_DAILY)} سکه" else "+${Economy.COINS_PER_DAILY} coins")
+            else
+                (if (isFa) "امروز دریافت کردی" else "Already claimed today"),
+            enabled = canClaimDaily,
+            onClick = onDaily
+        )
+
+        CoinHubActionCard(
+            accent = shopColor,
+            icon = {
+                Icon(Icons.Outlined.ShoppingCart, contentDescription = null, tint = shopColor, modifier = Modifier.size(26.dp))
+            },
+            title = if (isFa) "خرید سکه" else "Buy coins",
+            subtitle = if (isFa) "بسته‌های ویژه" else "Special packages",
+            enabled = true,
+            onClick = onBuyCoins
+        )
+
+        TextButton(onClick = onClose) {
+            Text(strings.close, color = TextSecondary)
+        }
+    }
 }

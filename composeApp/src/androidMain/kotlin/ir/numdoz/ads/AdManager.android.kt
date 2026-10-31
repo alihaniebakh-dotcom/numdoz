@@ -93,6 +93,63 @@ class TapsellAdManager : AdManager {
             onFailed(t.message ?: "request exception")
         }
     }
+
+    override fun showInterstitial(
+        onClosed: () -> Unit,
+        onFailed: (String) -> Unit
+    ) {
+        val activity = currentActivity?.get()
+        if (activity == null) {
+            onFailed("no activity")
+            return
+        }
+        initialize()
+
+        println("[NumDoz/ad] requesting interstitial zone=${NumDozApp.INTERSTITIAL_ZONE_ID}")
+
+        try {
+            Tapsell.requestInterstitialAd(
+                NumDozApp.INTERSTITIAL_ZONE_ID,
+                object : RequestResultListener {
+                    override fun onSuccess(adId: String) {
+                        println("[NumDoz/ad] interstitial loaded: $adId")
+                        try {
+                            Tapsell.showInterstitialAd(
+                                adId,
+                                activity,
+                                object : AdStateListener.Interstitial {
+                                    override fun onAdImpression() {
+                                        println("[NumDoz/ad] interstitial impression")
+                                    }
+                                    override fun onAdClicked() {
+                                        println("[NumDoz/ad] interstitial clicked")
+                                    }
+                                    override fun onAdClosed(completionState: AdShowCompletionState) {
+                                        println("[NumDoz/ad] interstitial closed: $completionState")
+                                        onClosed()
+                                    }
+                                    override fun onAdFailed(message: String) {
+                                        println("[NumDoz/ad] interstitial show failed: $message")
+                                        onFailed(message)
+                                    }
+                                }
+                            )
+                        } catch (t: Throwable) {
+                            println("[NumDoz/ad] interstitial show exception: ${t.message}")
+                            onFailed(t.message ?: "show exception")
+                        }
+                    }
+                    override fun onFailure(message: String) {
+                        println("[NumDoz/ad] interstitial request failed: $message")
+                        onFailed(message)
+                    }
+                }
+            )
+        } catch (t: Throwable) {
+            println("[NumDoz/ad] interstitial request exception: ${t.message}")
+            onFailed(t.message ?: "request exception")
+        }
+    }
 }
 
 actual fun createAdManager(): AdManager = TapsellAdManager()

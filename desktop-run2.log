@@ -1,0 +1,67 @@
+
+> Configure project :composeApp
+w: Kotlin Multiplatform <-> Android Gradle Plugin compatibility issue:
+The applied Android Gradle Plugin version (8.6.0) is higher 
+than the maximum known to the Kotlin Gradle Plugin.
+Tooling stability in such configuration isn't tested, please report encountered issues to https://kotl.in/issue
+
+Minimum supported Android Gradle Plugin version: 7.1
+Maximum tested Android Gradle Plugin version: 8.5
+
+To suppress this message add 'kotlin.mpp.androidGradlePluginCompatibility.nowarn=true' to your gradle.properties
+
+
+> Task :composeApp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :composeApp:convertXmlValueResourcesForCommonMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:prepareComposeResourcesTaskForCommonMain UP-TO-DATE
+> Task :composeApp:generateResourceAccessorsForCommonMain UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForDesktopMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForDesktopMain NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForDesktopMain NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForDesktopMain NO-SOURCE
+> Task :composeApp:generateActualResourceCollectorsForDesktopMain UP-TO-DATE
+> Task :composeApp:generateComposeResClass UP-TO-DATE
+> Task :composeApp:generateExpectResourceCollectorsForCommonMain UP-TO-DATE
+> Task :composeApp:compileKotlinDesktop UP-TO-DATE
+> Task :composeApp:assembleDesktopMainResources UP-TO-DATE
+> Task :composeApp:desktopProcessResources UP-TO-DATE
+> Task :composeApp:desktopMainClasses UP-TO-DATE
+> Task :composeApp:desktopJar UP-TO-DATE
+> Task :composeApp:prepareAppResources NO-SOURCE
+
+> Task :composeApp:run
+[SKIKO] warn: Fallback to next API
+org.jetbrains.skiko.RenderException: Failed to create DirectX12 device.
+SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+[NumDoz/db] path = C:\Users\Hanli\NumDoz\numdoz.db
+[NumDoz/audio] music file: files/calm.mp3 (7042622 bytes)
+[NumDoz/audio] startMusic: 7042622 bytes
+[NumDoz/ad] mock initialized
+[NumDoz/audio] loop: enc=MPEG1L3 sr=44100.0 ch=2 bits=-1 fs=-1
+[NumDoz/audio] converting to PCM: PCM_SIGNED 44100.0 Hz, 16 bit, stereo, 4 bytes/frame, little-endian
+[NumDoz/audio] line opened OK
+[NumDoz/db] schema ensured
+[NumDoz/db] already seeded (2 years)
+[NumDoz/app] boot complete, lang=FA, user=ali
+[NumDoz/cloud] found session ? fetching profile ...
+[NumDoz/cloud] pushProfile ok: username='ali', avatar=0
+[NumDoz/db] schema ensured
+[NumDoz/cloud] merge: local wallet is active (coins=45), keeping local
+[NumDoz/db] already seeded (2 years)
+[NumDoz/cloud] merge: local has 16 progress rows, keeping local
+[NumDoz/cloud] ? logged in as 46cfe7a4-ca0c-4d39-b6e5-5a29d34d1845
+[NumDoz/cloud]    user: username='', avatarId=0
+[NumDoz/cloud]    wallet: coins=45, hints=2, capsules=1
+[NumDoz/cloud]    progress: 15 levels
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.8/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 2m 8s
+11 actionable tasks: 1 executed, 10 up-to-date

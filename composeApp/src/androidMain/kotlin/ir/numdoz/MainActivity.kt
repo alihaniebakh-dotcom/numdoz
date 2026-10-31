@@ -7,12 +7,16 @@ import ir.numdoz.ads.registerAdActivity
 import ir.numdoz.audio.LifecycleBus
 import ir.numdoz.audio.initAndroidAudio
 import ir.numdoz.data.local.initAndroidDataStore
+import ir.numdoz.data.session.initAndroidSessionStore
+import ir.numdoz.billing.AndroidBillingInstaller
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AndroidBillingInstaller.install(this)
         initAndroidAudio(this)
         initAndroidDataStore(this)
+        initAndroidSessionStore(this)
         registerAdActivity(this)
         setContent {
             App()
@@ -27,5 +31,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         LifecycleBus.notifyResumed()
+    }
+
+    override fun onDestroy() {
+        AndroidBillingInstaller.disposeIfMatches(this)
+        super.onDestroy()
     }
 }

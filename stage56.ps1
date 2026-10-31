@@ -1,0 +1,255 @@
+$ErrorActionPreference = 'Stop'
+$AppRoot = "E:\Android App\Numdoz"
+Set-Location $AppRoot
+$enc = [System.Text.UTF8Encoding]::new($false)
+$stamp = Get-Date -Format 'HHmmss'
+
+# [1/3] Screen.Shop
+$screenPath = "$AppRoot\composeApp\src\commonMain\kotlin\ir\numdoz\ui\navigation\Screen.kt"
+Copy-Item $screenPath "$screenPath.bak-$stamp" -Force
+$sc = [System.IO.File]::ReadAllText($screenPath)
+if ($sc -notmatch 'object Shop') {
+    $sc = $sc -replace '(data object Profile : Screen\(\))', "`$1`r`n    data object Shop : Screen()"
+    [System.IO.File]::WriteAllText($screenPath, $sc, $enc)
+    Write-Host "[1/3] Screen.Shop added" -ForegroundColor Green
+} else {
+    Write-Host "[1/3] Screen.Shop already present" -ForegroundColor Yellow
+}
+
+# [2/3] ShopScreen.kt
+$shopPath = "$AppRoot\composeApp\src\commonMain\kotlin\ir\numdoz\ui\screens\ShopScreen.kt"
+
+$shopCode = @"
+package ir.numdoz.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import ir.numdoz.data.local.DataStore
+import ir.numdoz.data.model.UserWallet
+import ir.numdoz.data.remote.ApiClient
+import ir.numdoz.data.remote.ApiException
+import ir.numdoz.data.remote.ProductDto
+import ir.numdoz.data.session.SessionStore
+import ir.numdoz.ui.components.MinimalBackground
+import ir.numdoz.ui.theme.LocalAccent
+import ir.numdoz.ui.theme.LocalAccentAlt
+import ir.numdoz.ui.theme.SurfaceMin
+import ir.numdoz.ui.theme.TextMuted
+import ir.numdoz.ui.theme.TextPrimary
+import kotlinx.coroutines.launch
+import kotlin.random.Random
+
+@Composable
+fun ShopScreen(
+    dataStore: DataStore,
+    sessionStore: SessionStore,
+    apiClient: ApiClient,
+    isFa: Boolean,
+    onBack: () -> Unit
+) {
+    val accent = LocalAccent.current
+    val accentAlt = LocalAccentAlt.current
+    val scope = rememberCoroutineScope()
+
+    var wallet by remember { mutableStateOf(UserWallet()) }
+    var products by remember { mutableStateOf<List<ProductDto>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+    var busyProduct by remember { mutableStateOf<String?>(null) }
+    var lastReward by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(Unit) {
+        try {
+            wallet = dataStore.getWallet()
+            products = apiClient.products().products
+        } catch (e: Throwable) {
+            errorMsg = e.message ?: "load failed"
+        } finally {
+            loading = false
+        }
+    }
+
+    MinimalBackground {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                }
+                Spacer(Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.clip(RoundedCornerShape(20.dp))
+                        .background(Brush.horizontalGradient(listOf(accent.copy(alpha = 0.22f), SurfaceMin.copy(alpha = 0.55f))))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Filled.Star, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                    Text(text = if (isFa) "\${wallet.coins} سکه" else "\${wallet.coins}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Text(text = if (isFa) "فروشگاه سکه" else "Coin Shop", fontSize = 28.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+            Spacer(Modifier.height(6.dp))
+            Text(text = if (isFa) "با سکه، راهنمایی و زمان اضافه بخر" else "Use coins to buy hints and extra time", fontSize = 13.sp, color = TextMuted)
+            Spacer(Modifier.height(24.dp))
+
+            when {
+                loading -> { Spacer(Modifier.height(60.dp)); CircularProgressIndicator(color = accent) }
+                errorMsg != null -> { Spacer(Modifier.height(30.dp)); Text(text = "خطا: \${errorMsg}", color = Color(0xFFFF6B6B), fontSize = 14.sp) }
+                else -> {
+                    Column(modifier = Modifier.widthIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        lastReward?.let { n ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                                    .background(Brush.horizontalGradient(listOf(accent.copy(alpha = 0.35f), accent.copy(alpha = 0.12f))))
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                            ) {
+                                Text(text = if (isFa) "سکه اضافه شد: \${n}" else "+\$n coins added", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
+                            }
+                        }
+                        products.forEach { p ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                                    .background(Brush.horizontalGradient(listOf(accent.copy(alpha = 0.12f), SurfaceMin.copy(alpha = 0.62f), SurfaceMin.copy(alpha = 0.42f))))
+                                    .drawBehind {
+                                        val r = size.height * 0.9f
+                                        drawCircle(
+                                            brush = Brush.radialGradient(
+                                                colors = listOf(accentAlt.copy(alpha = 0.10f), Color.Transparent),
+                                                center = Offset(size.width * 0.9f, size.height / 2f),
+                                                radius = r
+                                            ),
+                                            radius = r, center = Offset(size.width * 0.9f, size.height / 2f)
+                                        )
+                                    }
+                                    .padding(horizontal = 18.dp, vertical = 18.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(52.dp).clip(RoundedCornerShape(26.dp))
+                                        .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.55f), accent.copy(alpha = 0.15f)))),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Filled.Star, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(text = if (isFa) "\${p.coins} سکه" else "\${p.coins} coins", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(text = p.id, fontSize = 11.sp, color = TextMuted)
+                                }
+                                val interaction = remember { MutableInteractionSource() }
+                                Box(
+                                    modifier = Modifier.clip(RoundedCornerShape(16.dp))
+                                        .background(Brush.horizontalGradient(listOf(accent.copy(alpha = 0.85f), accent.copy(alpha = 0.55f))))
+                                        .clickable(interactionSource = interaction, indication = null, enabled = busyProduct != p.id) {
+                                            scope.launch {
+                                                busyProduct = p.id
+                                                errorMsg = null
+                                                try {
+                                                    val secret = sessionStore.getSecret() ?: throw IllegalStateException("no session")
+                                                    val token = "mock_\${p.id}_\${Random.nextLong()}_\${System.currentTimeMillis()}"
+                                                    val res = apiClient.purchaseVerify(secret, p.id, token)
+                                                    val fresh = dataStore.getWallet()
+                                                    dataStore.updateWallet(fresh.copy(coins = res.wallet?.coins ?: (fresh.coins + res.coinsGranted)))
+                                                    wallet = dataStore.getWallet()
+                                                    lastReward = res.coinsGranted
+                                                } catch (e: ApiException) {
+                                                    errorMsg = e.message
+                                                } catch (e: Throwable) {
+                                                    errorMsg = e.message ?: "purchase failed"
+                                                } finally {
+                                                    busyProduct = null
+                                                }
+                                            }
+                                        }
+                                        .padding(horizontal = 18.dp, vertical = 10.dp)
+                                ) {
+                                    if (busyProduct == p.id) {
+                                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                                    } else {
+                                        Text(text = if (isFa) "خرید" else "Buy", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(20.dp))
+                        Text(text = if (isFa) "پرداخت واقعی از طریق بازار به زودی فعال می‌شود" else "Real Bazaar payment coming soon", fontSize = 11.sp, color = TextMuted)
+                        Spacer(Modifier.height(20.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+"@
+[System.IO.File]::WriteAllText($shopPath, $shopCode, $enc)
+Write-Host "[2/3] ShopScreen.kt written" -ForegroundColor Green
+
+# [3/3] App.kt: import + navigation
+$appPath = "$AppRoot\composeApp\src\commonMain\kotlin\ir\numdoz\App.kt"
+Copy-Item $appPath "$appPath.bak-$stamp" -Force
+$app = [System.IO.File]::ReadAllText($appPath)
+
+if ($app -notmatch 'import ir.numdoz.ui.screens.ShopScreen') {
+    $app = $app -replace '(import ir.numdoz.ui.screens.YearListScreen)', "`$1`r`nimport ir.numdoz.ui.screens.ShopScreen"
+}
+$profileAnchor = "                                Screen.Profile -> ProfileScreen("
+$shopBranch = "                                Screen.Shop -> ShopScreen(`r`n                                    dataStore = dataStore,`r`n                                    sessionStore = sessionStore,`r`n                                    apiClient = apiClient,`r`n                                    isFa = lang == Lang.FA,`r`n                                    onBack = { screen = Screen.Profile }`r`n                                )`r`n`r`n$profileAnchor"
+if ($app -notmatch 'Screen\.Shop\s*->') {
+    $app = $app.Replace($profileAnchor, $shopBranch)
+}
+[System.IO.File]::WriteAllText($appPath, $app, $enc)
+Write-Host "[3/3] App.kt updated (backup: .bak-$stamp)" -ForegroundColor Green
+
+# Build
+Write-Host "`nBuilding ..." -ForegroundColor Cyan
+cmd /c "gradlew.bat :composeApp:compileDebugKotlinAndroid --console=plain > compile-stage5.log 2>&1"
+Write-Host "exit=$LASTEXITCODE" -ForegroundColor DarkGray
+
+Get-Content .\compile-stage5.log -ErrorAction SilentlyContinue |
+    Where-Object { $_ -match 'BUILD (SUCCESSFUL|FAILED)|^e: |error:|FAILED' } |
+    Select-Object -Last 25 | ForEach-Object { Write-Host "  $_" }

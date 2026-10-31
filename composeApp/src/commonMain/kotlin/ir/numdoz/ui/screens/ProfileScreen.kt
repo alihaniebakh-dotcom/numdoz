@@ -103,7 +103,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProfileScreen(
     dataStore: DataStore,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onShopClick: () -> Unit = {}
 ) {
     val audio = LocalAudio.current
     val adManager = LocalAdManager.current
@@ -603,6 +604,27 @@ fun ProfileScreen(
                                 if (isFa) "${toFaNum(wallet.coins)} سکه" else "${wallet.coins} coins",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color(0xFFFFC947),
+                                maxLines = 1
+                            )
+                        }
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            Color(0xFF6EC8FF).copy(alpha = 0.85f),
+                                            Color(0xFF6EC8FF).copy(alpha = 0.55f)
+                                        )
+                                    )
+                                )
+                                .clickable { onShopClick() }
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                if (isFa) "+ خرید سکه" else "+ Buy coins",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
                                 maxLines = 1
                             )
                         }

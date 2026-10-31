@@ -21,6 +21,11 @@ import ir.numdoz.ads.createAdManager
 import ir.numdoz.audio.LocalAudio
 import ir.numdoz.audio.rememberAudioManager
 import ir.numdoz.data.local.createDataStore
+import ir.numdoz.data.local.SyncingDataStore
+import ir.numdoz.data.remote.ApiClient
+import ir.numdoz.data.remote.CloudSync
+import ir.numdoz.data.remote.CloudMerge
+import ir.numdoz.data.session.createSessionStore
 import ir.numdoz.i18n.Lang
 import ir.numdoz.i18n.LocalLang
 import ir.numdoz.i18n.LocalStrings
@@ -38,6 +43,7 @@ import ir.numdoz.ui.screens.ProfileSetupScreen
 import ir.numdoz.data.model.UserProfile
 import ir.numdoz.util.currentTimeMillis
 import ir.numdoz.ui.screens.YearListScreen
+import ir.numdoz.ui.screens.ShopScreen
 import ir.numdoz.ui.theme.LocalAccent
 import ir.numdoz.ui.theme.LocalAccentAlt
 import ir.numdoz.ui.theme.LocalAccentTertiary
@@ -50,7 +56,12 @@ fun App() {
     val audio = rememberAudioManager()
     val scope = rememberCoroutineScope()
     val adManager = remember { createAdManager() }
-    val dataStore = remember { createDataStore() }
+    val sessionStore = remember { createSessionStore() }
+    val apiClient = remember { ApiClient() }
+    val cloudSync = remember { CloudSync(apiClient, sessionStore, scope) }
+    val localStore = remember { createDataStore() }
+    val cloudMerge = remember { CloudMerge(localStore) }
+    val dataStore = remember { SyncingDataStore(localStore, cloudSync) }
     var screen by remember { mutableStateOf<Screen>(Screen.Splash) }
     var tint by remember { mutableStateOf<Color?>(null) }
     var lang by remember { mutableStateOf(Lang.FA) }
@@ -77,6 +88,29 @@ fun App() {
             println("[NumDoz/app] boot complete, lang=${lang.name}, user=${loaded.username}")
         } catch (t: Throwable) {
             println("[NumDoz/app] boot error: ${t.message}")
+        }
+
+        // --- Cloud sync (Stage 5.4) ---
+        try {
+            val secret = sessionStore.getSecret()
+            if (secret == null) {
+                println("[NumDoz/cloud] no session — registering new user ...")
+                val reg = apiClient.register()
+                sessionStore.save(reg.sessionSecret, reg.id)
+                println("[NumDoz/cloud] ✅ registered as ${reg.id}")
+                println("[NumDoz/cloud]    wallet: coins=${reg.wallet.coins}, hints=${reg.wallet.hints}, capsules=${reg.wallet.capsules}")
+                cloudSync.fullPushIfFirstSession(localStore)
+            } else {
+                println("[NumDoz/cloud] found session — fetching profile ...")
+                val me = apiClient.me(secret)
+                cloudMerge.applyIfLocalEmpty(me)
+                println("[NumDoz/cloud] ✅ logged in as ${me.user?.id ?: "unknown"}")
+                println("[NumDoz/cloud]    user: username='${me.user?.username ?: ""}', avatarId=${me.user?.avatarId ?: 0}")
+                println("[NumDoz/cloud]    wallet: coins=${me.wallet?.coins ?: 0}, hints=${me.wallet?.hints ?: 0}, capsules=${me.wallet?.capsules ?: 0}")
+                println("[NumDoz/cloud]    progress: ${me.progress.size} levels")
+            }
+        } catch (e: Throwable) {
+            println("[NumDoz/cloud] ❌ sync failed: ${e.message}")
         }
     }
 
@@ -136,9 +170,18 @@ fun App() {
                                     }
                                 )
 
+                                Screen.Shop -> ShopScreen(
+                                    dataStore = dataStore,
+                                    sessionStore = sessionStore,
+                                    apiClient = apiClient,
+                                    isFa = lang == Lang.FA,
+                                    onBack = { screen = Screen.YearList }
+                                )
+
                                 Screen.Profile -> ProfileScreen(
                                     dataStore = dataStore,
-                                    onBack = { screen = Screen.YearList }
+                                    onBack = { screen = Screen.YearList },
+                                    onShopClick = { screen = Screen.Shop }
                                 )
                                 Screen.YearList -> YearListScreen(
                                     dataStore = dataStore,
@@ -147,6 +190,7 @@ fun App() {
                                     onTintChange = { tint = it },
                                     onYearClick = { yearId -> screen = Screen.Chapters(yearId) },
                                     onProfileClick = { screen = Screen.Profile },
+                                    onShopClick = { screen = Screen.Shop }
                                 )
                                 is Screen.Chapters -> ChaptersScreen(
                                     yearId = s.yearId,

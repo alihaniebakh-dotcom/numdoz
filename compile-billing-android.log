@@ -1,0 +1,128 @@
+
+> Configure project :composeApp
+w: Kotlin Multiplatform <-> Android Gradle Plugin compatibility issue:
+The applied Android Gradle Plugin version (8.6.0) is higher 
+than the maximum known to the Kotlin Gradle Plugin.
+Tooling stability in such configuration isn't tested, please report encountered issues to https://kotl.in/issue
+
+Minimum supported Android Gradle Plugin version: 7.1
+Maximum tested Android Gradle Plugin version: 8.5
+
+To suppress this message add 'kotlin.mpp.androidGradlePluginCompatibility.nowarn=true' to your gradle.properties
+
+
+> Task :composeApp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :composeApp:convertXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidMain NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidMain NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForCommonMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:prepareComposeResourcesTaskForCommonMain UP-TO-DATE
+> Task :composeApp:generateResourceAccessorsForCommonMain UP-TO-DATE
+> Task :composeApp:generateActualResourceCollectorsForAndroidMain UP-TO-DATE
+> Task :composeApp:generateComposeResClass UP-TO-DATE
+> Task :composeApp:generateExpectResourceCollectorsForCommonMain UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForAndroidDebug NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidDebug NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidDebug NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidDebug NO-SOURCE
+> Task :composeApp:preBuild UP-TO-DATE
+> Task :composeApp:preDebugBuild UP-TO-DATE
+> Task :composeApp:checkDebugAarMetadata UP-TO-DATE
+> Task :composeApp:generateDebugResValues UP-TO-DATE
+> Task :composeApp:mapDebugSourceSetPaths UP-TO-DATE
+> Task :composeApp:generateDebugResources UP-TO-DATE
+> Task :composeApp:mergeDebugResources UP-TO-DATE
+> Task :composeApp:packageDebugResources UP-TO-DATE
+> Task :composeApp:parseDebugLocalResources UP-TO-DATE
+> Task :composeApp:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :composeApp:extractDeepLinksDebug UP-TO-DATE
+> Task :composeApp:processDebugMainManifest UP-TO-DATE
+> Task :composeApp:processDebugManifest UP-TO-DATE
+> Task :composeApp:processDebugManifestForPackage UP-TO-DATE
+> Task :composeApp:processDebugResources UP-TO-DATE
+
+> Task :composeApp:compileDebugKotlinAndroid FAILED
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:46:46 Argument type mismatch: actual type is 'kotlin.Function2<ir.cafebazaar.poolakey.callback.ConnectionCallback, ERROR CLASS: Cannot infer type for parameter cb, kotlin.Unit>', but 'kotlin.Function1<ir.cafebazaar.poolakey.callback.ConnectionCallback, kotlin.Unit>' was expected.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:46:48 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:47:24 Unresolved reference 'connectionSucceed'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:52:24 Unresolved reference 'connectionFailed'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:52:43 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:54:57 Unresolved reference 'message'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:57:24 Unresolved reference 'disconnected'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:69:52 Argument type mismatch: actual type is 'kotlin.Function2<ir.cafebazaar.poolakey.callback.GetSkuDetailsCallback, ERROR CLASS: Cannot infer type for parameter cb, kotlin.Unit>', but 'kotlin.Function1<ir.cafebazaar.poolakey.callback.GetSkuDetailsCallback, kotlin.Unit>' was expected.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:69:54 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:70:20 Unresolved reference 'getSkuDetailsSucceed'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:70:43 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:71:47 Unresolved reference 'size'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:73:30 Overload resolution ambiguity between candidates:
+fun <R, T> Result<T>.map(transform: (@ParameterName(...) T) -> R): Result<R>
+    [R|Contract description]
+     <
+        CallsInPlace(transform, AT_MOST_ONCE)
+    >
+fun <T, R> Array<out T>.map(transform: (T) -> R): List<R>
+fun <R> BooleanArray.map(transform: (Boolean) -> R): List<R>
+fun <R> ByteArray.map(transform: (Byte) -> R): List<R>
+fun <R> CharArray.map(transform: (Char) -> R): List<R>
+fun <R> DoubleArray.map(transform: (Double) -> R): List<R>
+fun <R> FloatArray.map(transform: (Float) -> R): List<R>
+fun <R> IntArray.map(transform: (Int) -> R): List<R>
+fun <R> LongArray.map(transform: (Long) -> R): List<R>
+fun <R> ShortArray.map(transform: (Short) -> R): List<R>
+fun <T, R> Iterable<T>.map(transform: (T) -> R): List<R>
+fun <K, V, R> Map<out K, V>.map(transform: (Map.Entry<K, V>) -> R): List<R>
+fun <R> UByteArray.map(transform: (UByte) -> R): List<R>
+fun <R> UIntArray.map(transform: (UInt) -> R): List<R>
+fun <R> ULongArray.map(transform: (ULong) -> R): List<R>
+fun <R> UShortArray.map(transform: (UShort) -> R): List<R>
+fun <T, R> Sequence<T>.map(transform: (T) -> R): Sequence<R>
+fun <R> CharSequence.map(transform: (Char) -> R): List<R>
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:73:36 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:75:40 Unresolved reference 'sku'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:76:43 Unresolved reference 'title'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:77:49 Unresolved reference 'description'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:78:43 Unresolved reference 'price'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:83:20 Unresolved reference 'getSkuDetailsFailed'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:83:42 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:84:51 Unresolved reference 'message'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:95:56 Argument type mismatch: actual type is 'kotlin.Function2<ir.cafebazaar.poolakey.callback.PurchaseCallback, ERROR CLASS: Cannot infer type for parameter cb, kotlin.Unit>', but 'kotlin.Function1<ir.cafebazaar.poolakey.callback.PurchaseCallback, kotlin.Unit>' was expected.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:95:58 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:96:20 Unresolved reference 'purchaseFlowBegan'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:97:20 Unresolved reference 'failedToBeginFlow'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:97:40 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:98:65 Unresolved reference 'message'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:101:20 Unresolved reference 'purchaseCanceled'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:107:20 Unresolved reference 'purchaseFailed'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:107:37 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:108:54 Unresolved reference 'message'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:111:20 Unresolved reference 'purchaseSucceed'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:137:51 Argument type mismatch: actual type is 'kotlin.Function2<ir.cafebazaar.poolakey.callback.ConsumeCallback, ERROR CLASS: Cannot infer type for parameter cb, kotlin.Unit>', but 'kotlin.Function1<ir.cafebazaar.poolakey.callback.ConsumeCallback, kotlin.Unit>' was expected.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:137:53 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:138:20 Unresolved reference 'consumeSucceed'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:142:20 Unresolved reference 'consumeFailed'.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:142:36 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///E:/Android%20App/Numdoz/composeApp/src/androidMain/kotlin/ir/numdoz/billing/AndroidBillingManager.kt:143:53 Unresolved reference 'message'.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':composeApp:compileDebugKotlinAndroid'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.8/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 7s
+20 actionable tasks: 1 executed, 19 up-to-date

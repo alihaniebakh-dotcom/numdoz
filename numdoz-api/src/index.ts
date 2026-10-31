@@ -7,9 +7,9 @@ export interface Env {
 }
 
 const PRODUCTS: Record<string, { coins: number; title: string }> = {
-  'coins_100':  { coins: 100,  title: '100 Coins' },
-  'coins_500':  { coins: 500,  title: '500 Coins' },
-  'coins_2000': { coins: 2000, title: '2000 Coins' },
+  'coin_100':  { coins: 100,  title: '100 Coins' },
+  'coin_500':  { coins: 500,  title: '500 Coins' },
+  'coin_1000': { coins: 1000, title: '1000 Coins' },
 };
 
 const corsHeaders: Record<string, string> = {

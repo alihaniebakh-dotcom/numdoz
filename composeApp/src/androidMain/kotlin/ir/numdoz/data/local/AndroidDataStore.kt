@@ -165,7 +165,6 @@ class AndroidDataStore(context: Context) :
                 db.execSQL("ALTER TABLE level_progress ADD COLUMN timeout_occurred INTEGER NOT NULL DEFAULT 0")
                 Log.d(TAG, "migration: +timeout_occurred")
             }
-        } catch
             val hasTimeLeft = db.rawQuery("PRAGMA table_info(level_progress)", null).use { c ->
                 while (c.moveToNext()) if (c.getString(c.getColumnIndexOrThrow("name")) == "time_left_seconds") return@use true
                 false
@@ -173,7 +172,8 @@ class AndroidDataStore(context: Context) :
             if (!hasTimeLeft) {
                 db.execSQL("ALTER TABLE level_progress ADD COLUMN time_left_seconds INTEGER NOT NULL DEFAULT -1")
                 Log.d(TAG, "migration: +time_left_seconds")
-            } (t: Throwable) { Log.e(TAG, "migration failed", t) }
+            }
+        } catch (t: Throwable) { Log.e(TAG, "migration failed", t) }
         Unit
     }
 

@@ -1,7 +1,8 @@
-﻿import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     kotlin("multiplatform")
+    kotlin("plugin.serialization")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.android.application")
@@ -22,6 +23,12 @@ kotlin {
                 implementation(compose.materialIconsExtended)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
+                // --- Networking + Serialization (Stage 5) ---
+                implementation("io.ktor:ktor-client-core:3.0.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.0.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
             }
         }
         val desktopMain by getting {
@@ -29,13 +36,16 @@ kotlin {
                 implementation(compose.desktop.currentOs)
                 implementation("org.xerial:sqlite-jdbc:3.45.3.0")
                 implementation("com.googlecode.soundlibs:mp3spi:1.9.5.4")
+                implementation("io.ktor:ktor-client-java:3.0.1")
             }
         }
         val androidMain by getting {
             dependencies {
                 implementation("ir.tapsell:tapsell:1.3.0")
                 implementation("ir.tapsell.mediation.adapter:legacy:1.3.0")
+                implementation("com.github.cafebazaar.Poolakey:poolakey:2.2.0")
                 implementation("androidx.activity:activity-compose:1.9.3")
+                implementation("io.ktor:ktor-client-okhttp:3.0.1")
             }
         }
     }
@@ -46,6 +56,21 @@ compose.resources {
 }
 
 android {
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("numdoz-release.jks")
+            storePassword = "NumDoz@2026"
+            keyAlias = "numdoz"
+            keyPassword = "NumDoz@2026"
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
+    }
     namespace = "ir.numdoz"
     compileSdk = 35
     defaultConfig {
@@ -57,8 +82,8 @@ android {
         applicationId = "ir.numdoz"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     sourceSets["main"].res.srcDirs("src/androidMain/res")

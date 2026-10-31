@@ -1,0 +1,155 @@
+package ir.numdoz.billing
+
+import android.content.Context
+import android.util.Log
+import androidx.activity.result.ActivityResultRegistry
+import ir.cafebazaar.poolakey.Connection
+import ir.cafebazaar.poolakey.Payment
+import ir.cafebazaar.poolakey.callback.ConnectionCallback
+import ir.cafebazaar.poolakey.callback.ConsumeCallback
+import ir.cafebazaar.poolakey.callback.GetSkuDetailsCallback
+import ir.cafebazaar.poolakey.callback.PurchaseCallback
+import ir.cafebazaar.poolakey.config.PaymentConfiguration
+import ir.cafebazaar.poolakey.config.SecurityCheck
+import ir.cafebazaar.poolakey.entity.PurchaseInfo
+import ir.cafebazaar.poolakey.entity.PurchaseState
+import ir.cafebazaar.poolakey.request.PurchaseRequest
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+
+class AndroidBillingManager(
+    appContext: Context,
+    private val registry: ActivityResultRegistry,
+    rsaPublicKey: String,
+) : BillingManager {
+    private val tag = "NumDoz/Billing"
+    private val securityCheck: SecurityCheck =
+        if (rsaPublicKey.isNotBlank()) SecurityCheck.Enable(rsaPublicKey)
+        else SecurityCheck.Disable
+    private val payment = Payment(
+        appContext,
+        PaymentConfiguration(localSecurityCheck = securityCheck),
+    )
+    @Volatile private var connection: Connection? = null
+    @Volatile private var connected: Boolean = false
+    private val connectMutex = Mutex()
+
+    override fun isConnected(): Boolean = connected
+
+    override suspend fun connect(): Result<Unit> = connectMutex.withLock {
+        if (connected) return@withLock Result.success(Unit)
+        runCatching {
+            suspendCancellableCoroutine<Unit> { cont ->
+                val cb = ConnectionCallback()
+                cb.connectionSucceed {
+                    connected = true
+                    Log.i(tag, "connect: success")
+                    if (cont.isActive) cont.resume(Unit)
+                }
+                cb.connectionFailed { t ->
+                    connected = false
+                    Log.e(tag, "connect: failed ${t.message}", t)
+                    if (cont.isActive) cont.resumeWithException(t)
+                }
+                cb.disconnected {
+                    connected = false
+                    Log.w(tag, "connect: disconnected")
+                }
+                connection = payment.connect(cb)
+            }
+        }
+    }
+
+    override suspend fun queryProducts(productIds: List<String>): Result<List<BillingProduct>> = runCatching {
+        ensureConnected()
+        suspendCancellableCoroutine<List<BillingProduct>> { cont ->
+            val cb = GetSkuDetailsCallback()
+            cb.getSkuDetailsSucceed { list ->
+                Log.i(tag, "query: ${list.size} products")
+                if (cont.isActive) cont.resume(
+                    list.map { s ->
+                        BillingProduct(id = s.sku, title = s.title, description = s.description, price = s.price)
+                    }
+                )
+            }
+            cb.getSkuDetailsFailed { t ->
+                Log.e(tag, "query: failed ${t.message}", t)
+                if (cont.isActive) cont.resumeWithException(t)
+            }
+            payment.getInAppSkuDetails(productIds, cb)
+        }
+    }
+
+    override suspend fun purchase(productId: String, payload: String): Result<BillingPurchase> = runCatching {
+        ensureConnected()
+        suspendCancellableCoroutine<BillingPurchase> { cont ->
+            val cb = PurchaseCallback()
+            cb.purchaseFlowBegan { Log.i(tag, "purchase: flow began for $productId") }
+            cb.failedToBeginFlow { t ->
+                Log.e(tag, "purchase: failedToBeginFlow ${t.message}", t)
+                if (cont.isActive) cont.resumeWithException(t)
+            }
+            cb.purchaseCanceled {
+                Log.w(tag, "purchase: canceled by user")
+                if (cont.isActive) cont.resumeWithException(IllegalStateException("purchase canceled"))
+            }
+            cb.purchaseFailed { t ->
+                Log.e(tag, "purchase: failed ${t.message}", t)
+                if (cont.isActive) cont.resumeWithException(t)
+            }
+            cb.purchaseSucceed { info: PurchaseInfo ->
+                if (info.purchaseState != PurchaseState.PURCHASED) {
+                    Log.w(tag, "purchase: state=${info.purchaseState}, rejecting")
+                    if (cont.isActive) cont.resumeWithException(
+                        IllegalStateException("purchase state not PURCHASED: ${info.purchaseState}")
+                    )
+                    return@purchaseSucceed
+                }
+                Log.i(tag, "purchase: success productId=${info.productId}")
+                if (cont.isActive) cont.resume(
+                    BillingPurchase(
+                        productId = info.productId,
+                        purchaseToken = info.purchaseToken,
+                        payload = info.payload ?: "",
+                        signature = info.dataSignature ?: "",
+                        orderId = info.orderId ?: "",
+                        originalJson = info.originalJson ?: "",
+                    )
+                )
+            }
+            payment.purchaseProduct(
+                registry,
+                PurchaseRequest(productId = productId, payload = payload),
+                cb,
+            )
+        }
+    }
+
+    override suspend fun consume(purchaseToken: String): Result<Unit> = runCatching {
+        suspendCancellableCoroutine<Unit> { cont ->
+            val cb = ConsumeCallback()
+            cb.consumeSucceed {
+                Log.i(tag, "consume: success")
+                if (cont.isActive) cont.resume(Unit)
+            }
+            cb.consumeFailed { t ->
+                Log.e(tag, "consume: failed ${t.message}", t)
+                if (cont.isActive) cont.resumeWithException(t)
+            }
+            payment.consumeProduct(purchaseToken, cb)
+        }
+    }
+
+    override fun disconnect() {
+        connection?.disconnect()
+        connection = null
+        connected = false
+    }
+
+    private fun ensureConnected() {
+        check(connected) { "Billing not connected. Call connect() first." }
+    }
+}
